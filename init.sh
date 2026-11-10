@@ -21,12 +21,18 @@ PORTAL_DIR=
 INFRA_NETWORK=
 KEYCLOAK_REALM=
 KEYCLOAK_CLIENT_ID=
+KEYCLOAK_PUBLIC_URL=
+KEYCLOAK_INTERNAL_URL=
+KEYCLOAK_HOST_PORT=
 
 DEFAULT_PORTAL_SERVER="http://localhost:9080"
 DEFAULT_INFRA_NETWORK="emobase-infra"
 DEFAULT_PORTAL_DIR="../emobase-portal-deploy"
 DEFAULT_KEYCLOAK_REALM="ibb"
 DEFAULT_KEYCLOAK_CLIENT_ID="ibb-client"
+DEFAULT_KEYCLOAK_HOST_PORT=8081
+DEFAULT_KEYCLOAK_PUBLIC_URL="http://localhost:${DEFAULT_KEYCLOAK_HOST_PORT}/ibb/keycloak"
+DEFAULT_KEYCLOAK_INTERNAL_URL="http://keycloak:8080/ibb/keycloak"
 
 fatal() {
   >&2 echo "❌ $1"
@@ -61,11 +67,19 @@ generate_password() {
 }
 
 usage() {
-  echo "Usage: $0 [-f|--force] [-p|--print] [-y|--yes] [--local] [--portal-server URL] [--portal-dir DIR] [--infra-network NAME] [--keycloak-realm NAME] [--keycloak-client-id ID]"
-  echo "  --portal-server     Public portal URL, also used as the Keycloak issuer (default: ${DEFAULT_PORTAL_SERVER})"
+  echo "Usage: $0 [-f|--force] [-p|--print] [-y|--yes] [--local] [--portal-server URL] [--portal-dir DIR] [--infra-network NAME] [--keycloak-public-url URL] [--keycloak-internal-url URL] [--keycloak-host-port PORT] [--keycloak-realm NAME] [--keycloak-client-id ID]"
+  echo "  --portal-server     Public portal origin, if this server runs one"
+  echo "                      (default: ${DEFAULT_PORTAL_SERVER})"
   echo "  --portal-dir        Portal checkout whose .env holds PUBLIC_SERVER"
   echo "                      (default: ${DEFAULT_PORTAL_DIR} when present)"
   echo "  --infra-network     Docker network shared with the deploy stacks (default: ${DEFAULT_INFRA_NETWORK})"
+  echo "  --keycloak-public-url"
+  echo "                      Browser-facing Keycloak base URL (default: ${DEFAULT_KEYCLOAK_PUBLIC_URL})"
+  echo "  --keycloak-internal-url"
+  echo "                      Container-facing Keycloak base URL on the shared network"
+  echo "                      (default: ${DEFAULT_KEYCLOAK_INTERNAL_URL})"
+  echo "  --keycloak-host-port"
+  echo "                      Host port for Keycloak (default: ${DEFAULT_KEYCLOAK_HOST_PORT})"
   echo "  --keycloak-realm    Shared realm used by the portal and by species that"
   echo "                      reuse it (default: ${DEFAULT_KEYCLOAK_REALM})"
   echo "  --keycloak-client-id"
@@ -100,6 +114,18 @@ while [[ $# -gt 0 ]]; do
       ;;
     --infra-network)
       INFRA_NETWORK="$2"
+      shift 2
+      ;;
+    --keycloak-public-url)
+      KEYCLOAK_PUBLIC_URL="$2"
+      shift 2
+      ;;
+    --keycloak-internal-url)
+      KEYCLOAK_INTERNAL_URL="$2"
+      shift 2
+      ;;
+    --keycloak-host-port)
+      KEYCLOAK_HOST_PORT="$2"
       shift 2
       ;;
     --keycloak-realm)
@@ -163,7 +189,7 @@ if [[ -z "$PORTAL_SERVER" ]]; then
   elif [[ "$YES" == true ]]; then
     PORTAL_SERVER=${DEFAULT_PORTAL_SERVER}
   else
-    read -rp "🌐 Public URL of the portal (Keycloak is proxied there) [${DEFAULT_PORTAL_SERVER}]: " PORTAL_SERVER
+    read -rp "🌐 Public URL of the portal, if this server runs one [${DEFAULT_PORTAL_SERVER}]: " PORTAL_SERVER
     PORTAL_SERVER="${PORTAL_SERVER:-${DEFAULT_PORTAL_SERVER}}"
   fi
 fi
@@ -187,19 +213,52 @@ if [[ -z "$INFRA_NETWORK" ]]; then
 fi
 [[ "$INFRA_NETWORK" =~ ^[a-zA-Z0-9_.-]+$ ]] || fatal "EMOBASE_INFRA_NETWORK contains invalid characters"
 
+if [[ -z "$KEYCLOAK_HOST_PORT" ]]; then
+  KEYCLOAK_HOST_PORT=$DEFAULT_KEYCLOAK_HOST_PORT
+fi
+[[ "$KEYCLOAK_HOST_PORT" =~ ^[0-9]+$ ]] && (( 10#$KEYCLOAK_HOST_PORT >= 1 && 10#$KEYCLOAK_HOST_PORT <= 65535 )) \
+  || fatal "KEYCLOAK_HOST_PORT must be a number between 1 and 65535"
+
+if [[ -z "$KEYCLOAK_PUBLIC_URL" ]]; then
+  default_public="http://localhost:${KEYCLOAK_HOST_PORT}/ibb/keycloak"
+  if [[ "$LOCAL" == true ]] || [[ "$YES" == true ]]; then
+    KEYCLOAK_PUBLIC_URL="$default_public"
+    if [[ "$LOCAL" != true ]]; then
+      >&2 echo "⚠️  KEYCLOAK_PUBLIC_URL defaults to ${KEYCLOAK_PUBLIC_URL}."
+      >&2 echo "   Set --keycloak-public-url for a real server."
+    fi
+  else
+    read -rp "🌐 Browser-facing Keycloak URL [${default_public}]: " KEYCLOAK_PUBLIC_URL
+    KEYCLOAK_PUBLIC_URL="${KEYCLOAK_PUBLIC_URL:-$default_public}"
+  fi
+fi
+KEYCLOAK_PUBLIC_URL="${KEYCLOAK_PUBLIC_URL%/}"
+[[ "$KEYCLOAK_PUBLIC_URL" =~ ^https?://[^/]+ ]] \
+  || fatal "KEYCLOAK_PUBLIC_URL must start with http:// or https://"
+
+KEYCLOAK_INTERNAL_URL="${KEYCLOAK_INTERNAL_URL:-$DEFAULT_KEYCLOAK_INTERNAL_URL}"
+KEYCLOAK_INTERNAL_URL="${KEYCLOAK_INTERNAL_URL%/}"
+[[ "$KEYCLOAK_INTERNAL_URL" =~ ^https?://[^/]+ ]] \
+  || fatal "KEYCLOAK_INTERNAL_URL must start with http:// or https://"
+
 KEYCLOAK_REALM="${KEYCLOAK_REALM:-$DEFAULT_KEYCLOAK_REALM}"
 KEYCLOAK_CLIENT_ID="${KEYCLOAK_CLIENT_ID:-$DEFAULT_KEYCLOAK_CLIENT_ID}"
 [[ "$KEYCLOAK_REALM" =~ ^[a-zA-Z0-9_.-]+$ ]] || fatal "KEYCLOAK_REALM contains invalid characters"
 [[ "$KEYCLOAK_CLIENT_ID" =~ ^[a-zA-Z0-9_.-]+$ ]] || fatal "KEYCLOAK_CLIENT_ID contains invalid characters"
 
 ENV_CONTENT="# ── Deployment ──────────────────────────────────────────────────────────────
-# Public origin of the portal deployment. Keycloak is proxied by the portal
-# nginx under <PORTAL_PUBLIC_SERVER>/ibb/keycloak/, so this must be exactly the
-# portal's PUBLIC_SERVER (same scheme, host and port, no trailing slash).
+# Browser-facing Keycloak base URL, without a trailing slash. Put a TLS
+# reverse proxy in front in production and point it at 127.0.0.1:${KEYCLOAK_HOST_PORT}.
+KEYCLOAK_PUBLIC_URL=${KEYCLOAK_PUBLIC_URL}
+KEYCLOAK_INTERNAL_URL=${KEYCLOAK_INTERNAL_URL}
+KEYCLOAK_HOST_PORT=${KEYCLOAK_HOST_PORT}
+
+# Public origin of the portal, if this server runs one. Used for the initial
+# realm redirect URI; add other origins with scripts/allow-origin.sh.
 PORTAL_PUBLIC_SERVER=${PORTAL_SERVER}
 
-# Name of the Docker network shared with emobase-portal-deploy and
-# emobase-deploy. Keep the same value in all three .env files.
+# Name of the Docker network shared with the local portal and species stacks.
+# Keep the same value in the three .env files on this server.
 EMOBASE_INFRA_NETWORK=${INFRA_NETWORK}
 
 # ── Keycloak shared realm ───────────────────────────────────────────────────
@@ -238,6 +297,8 @@ chmod 600 .env
 
 >&2 echo "✅ .env file generated successfully"
 >&2 echo "   Portal URL:     ${PORTAL_SERVER}"
+>&2 echo "   Keycloak URL:   ${KEYCLOAK_PUBLIC_URL}"
+>&2 echo "   Keycloak port:  ${KEYCLOAK_HOST_PORT}"
 >&2 echo "   Infra network:  ${INFRA_NETWORK}"
 >&2 echo "   Shared realm:   ${KEYCLOAK_REALM} (${KEYCLOAK_CLIENT_ID})"
 >&2 echo

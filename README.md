@@ -1,4 +1,4 @@
-# EMOBase shared infrastructure
+# EMOBase infrastructure (one per server)
 
 Shared services for an EMOBase deployment server:
 
@@ -7,56 +7,51 @@ Shared services for an EMOBase deployment server:
 | `mysql` | One MySQL 8.0 instance for the portal, Keycloak and every species' Directus |
 | `keycloak` | One Keycloak 24 instance with the shared portal realm and optional dedicated species realms |
 
-`emobase-portal-deploy` and each `emobase-deploy` species checkout run their
-application containers only. They no longer start their own MySQL or Keycloak.
-The portal joins the Docker network created by this stack and reaches both
-services as `mysql:3306` and `keycloak:8080`. Species Directus joins it for
-MySQL; species web/Quarkus services reach Keycloak through the portal origin,
-so several species can share the network without their service names colliding.
+Each server that hosts EMOBase runs its own `emobase-infra`. It provides one
+MySQL and one Keycloak for every portal/species stack on **that server**. The
+portal and species Directus join the shared Docker network and reach MySQL as
+`mysql:3306`; services on the network reach Keycloak as `keycloak:8080`.
+Keycloak also has its own browser-facing URL (`KEYCLOAK_PUBLIC_URL`), so species
+authentication does not depend on the portal.
 
-Running one MySQL and one Keycloak instead of one pair per stack is what makes
-several species fit on a single server. Elasticsearch is still per stack.
+Running one MySQL and one Keycloak per server, instead of one pair per stack, is
+what makes several species fit on one machine. Elasticsearch is still per stack.
 
 ```
-                    ┌──────────────────────────────┐
-Browser ───────────►│ emobase-portal-deploy :9080  │
-                    │  nginx ──► /ibb/keycloak/ ───┼──┐
-                    └──────────────────────────────┘  │
-                           ▲                          │ shared network
-                           │ Keycloak via portal      │ (emobase-infra)
-                    ┌──────┴───────────────────────┐  │
-                    │ emobase-deploy :9090         │  │
-                    │  UI / Quarkus ───────────────┘  │
-                    │  Directus ──────────────────────┼──► mysql
-                    └──────────────────────────────┘  │
-                                                      ▼
-                    ┌─────────────────────────────────────────┐
-                    │ emobase-infra                           │
-                    │  keycloak :8080  ◄──────────────────────┘
-                    │  mysql :3306    ◄── species Directus    │
-                    └─────────────────────────────────────────┘
-```
+Browser ──► portal :9080        Browser ──► Keycloak :8081
+              │                               (KEYCLOAK_PUBLIC_URL)
+              │
+portal/species services ──► keycloak:8080 (shared network or public URL)
+species Directus ─────────► mysql:3306
 
-The portal nginx is the only public entrypoint for Keycloak, at
-`<PORTAL_PUBLIC_SERVER>/ibb/keycloak/`. Species sites use the portal's public
-issuer and therefore redirect to the portal origin during login.
+┌─────────────────────────────────────────────────────────┐
+│ emobase-infra (one per server)                          │
+│  keycloak :8081 ──► public auth endpoint                │
+│  mysql :3306                                            │
+└─────────────────────────────────────────────────────────┘
+```
 
 ## Prerequisites
 
 - Docker Engine 24+ with Compose v2
 - `python3` for the Keycloak helper scripts (`allow-origin.sh`, `create-realm.sh`)
-- The public portal URL decided before the first start
+- The Keycloak public URL decided before the first start
+- The portal URL, if this server runs a portal
 
 ## Quick start
 
 1. Generate `.env`:
 
    ```bash
-   ./init.sh --portal-server https://portal.example.org
+   ./init.sh \
+     --portal-server https://portal.example.org \
+     --keycloak-public-url https://auth.example.org/ibb/keycloak
    ```
 
-   The script reads `../emobase-portal-deploy/.env` automatically when that
-   checkout exists, otherwise use `--portal-server`. It generates all secrets.
+   For a local trial, `./init.sh --local` uses
+   `http://localhost:8081/ibb/keycloak`. The script reads
+   `../emobase-portal-deploy/.env` automatically when that checkout exists,
+   otherwise use `--portal-server`. It generates all secrets.
 
 2. Start the shared services and wait for their health checks:
 
@@ -66,14 +61,15 @@ issuer and therefore redirect to the portal origin during login.
 
 3. Deploy the portal with
    [`emobase-portal-deploy`](https://github.com/EMOBase/emobase-portal-deploy). Its `init.sh` reads
-   `MYSQL_ROOT_PASSWORD`, `KEYCLOAK_REALM`, `KEYCLOAK_CLIENT_ID` and
-   `KEYCLOAK_CLIENT_SECRET` from this `.env`, so the two stacks cannot drift.
+   `MYSQL_ROOT_PASSWORD`, `KEYCLOAK_PUBLIC_URL`, `KEYCLOAK_INTERNAL_URL`,
+   `KEYCLOAK_REALM`, `KEYCLOAK_CLIENT_ID` and `KEYCLOAK_CLIENT_SECRET` from this
+   `.env`, so the two stacks cannot drift.
 
-The Keycloak admin console is at
-`<PORTAL_PUBLIC_SERVER>/ibb/keycloak/admin/`, using `KEYCLOAK_ADMIN` and
-`KEYCLOAK_ADMIN_PASSWORD` from this `.env`. The seeded realm user
-(`COCO_USERNAME` / `COCO_PASSWORD`) can sign in to every portal and species
-site; its password is temporary and must be changed on first login.
+The Keycloak admin console is at `${KEYCLOAK_PUBLIC_URL}/admin/`, using
+`KEYCLOAK_ADMIN` and `KEYCLOAK_ADMIN_PASSWORD` from this `.env`. The seeded
+realm user (`COCO_USERNAME` / `COCO_PASSWORD`) can sign in to every portal and
+species site on this server; its password is temporary and must be changed on
+first login.
 
 ## Keycloak realm strategy
 
@@ -134,15 +130,20 @@ The deploy stacks' `init.sh` reads these from this `.env`:
 | Variable | Used by |
 | --- | --- |
 | `MYSQL_ROOT_PASSWORD` | Portal genomics API/workers and species Directus |
+| `KEYCLOAK_PUBLIC_URL` | Browser-facing Keycloak issuer for the portal and species |
+| `KEYCLOAK_INTERNAL_URL` | Container-facing Keycloak URL on the shared network |
+| `KEYCLOAK_HOST_PORT` | Host port where Keycloak is published |
 | `KEYCLOAK_REALM` | Portal and shared-realm species |
 | `KEYCLOAK_CLIENT_ID` | Portal and shared-realm species |
 | `KEYCLOAK_CLIENT_SECRET` | Portal and shared-realm species |
 | `COCO_USERNAME` / `COCO_PASSWORD` | Shared-realm seed user |
-| `PORTAL_PUBLIC_SERVER` | Confirms the portal URL and Keycloak issuer |
+| `PORTAL_PUBLIC_SERVER` | Initial portal redirect origin (if this server runs a portal) |
 | `EMOBASE_INFRA_NETWORK` | External Docker network name |
 
-Keep `PORTAL_PUBLIC_SERVER` exactly equal to the portal's `PUBLIC_SERVER`
-(scheme, host, port, no trailing slash).
+Keep `PORTAL_PUBLIC_SERVER` equal to the portal's `PUBLIC_SERVER` when this
+server runs a portal. On a species-only server it can be any initial origin
+(for example the first species URL); additional origins are added with
+`scripts/allow-origin.sh`.
 
 ## Local trial
 
@@ -151,7 +152,8 @@ Keep `PORTAL_PUBLIC_SERVER` exactly equal to the portal's `PUBLIC_SERVER`
 docker compose up -d --wait
 ```
 
-This uses `http://localhost:9080` as the portal URL. Then follow the local
+This uses `http://localhost:9080` as the portal URL and
+`http://localhost:8081/ibb/keycloak` as the Keycloak URL. Then follow the local
 walkthrough in the
 [EMOBase deployment guide](https://github.com/EMOBase/emobase-docs/blob/main/DEPLOYMENT.md#local-setup-no-public-server).
 If the local species uses the shared realm, register its origin before signing
@@ -191,7 +193,7 @@ explicitly to upgrade. Back up MySQL before a major-version upgrade.
 
 ## Reset
 
-This destroys the shared databases and all Keycloak users:
+This destroys this server's databases and all local Keycloak users:
 
 ```bash
 docker compose down -v
@@ -203,9 +205,10 @@ Only do this when the data can be lost.
 
 - The MySQL port is not published on the host. Attach administration or backup
   containers to the `emobase-infra` network, or use `docker compose exec`.
-- To let a deploy stack on another Docker host use this MySQL/Keycloak, publish
-  the ports and change `EMOBASE_GENOMICS_MYSQL__HOST` / the Keycloak URL in that
-  stack. The default setup assumes one Docker host.
+- Run one `emobase-infra` per server. MySQL and Keycloak are not shared between
+  servers; a species on another server uses that server's own infra.
+- Keycloak is published on `KEYCLOAK_HOST_PORT` and has its own public URL
+  (`KEYCLOAK_PUBLIC_URL`). Put a TLS reverse proxy in front in production.
 - `keycloak/ibb-realm.json` uses Keycloak's environment substitution for
-  `${PORTAL_PUBLIC_SERVER}`, `${KEYCLOAK_CLIENT_SECRET}`, `${COCO_USERNAME}`
-  and `${COCO_PASSWORD}`.
+  `${PORTAL_PUBLIC_SERVER}`, `${KEYCLOAK_REALM}`, `${KEYCLOAK_CLIENT_ID}`,
+  `${KEYCLOAK_CLIENT_SECRET}`, `${COCO_USERNAME}` and `${COCO_PASSWORD}`.

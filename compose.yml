@@ -1,15 +1,16 @@
 name: emobase-infra
 
-# Shared infrastructure for EMOBase deployments.
+# Per-server infrastructure for EMOBase deployments.
 #
-# This stack runs the services that every portal/species deployment uses:
+# Run one of these stacks on every server that hosts the portal and/or species.
+# It runs the services that every local portal/species deployment uses:
 #   * MySQL           - databases for the portal, Keycloak and Directus
 #   * Keycloak        - the shared portal realm plus optional species realms
 #
 # The deploy stacks (emobase-portal-deploy and emobase-deploy) join the
-# external network below and reach MySQL and Keycloak by their service names.
-# Keycloak is exposed to browsers through the portal nginx at
-# <PORTAL_PUBLIC_SERVER>/ibb/keycloak/.
+# external network below and reach MySQL/Keycloak by their service names.
+# Keycloak also has its own browser-facing endpoint at KEYCLOAK_PUBLIC_URL, so
+# species authentication does not depend on the portal.
 
 services:
   mysql:
@@ -44,11 +45,10 @@ services:
     environment:
       KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN:-admin}
       KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
-      # Keycloak is only reachable through the portal nginx. Keeping one
-      # canonical public URL makes redirects and the issuer claim consistent
-      # for the portal and every species site.
-      KC_HOSTNAME_URL: ${PORTAL_PUBLIC_SERVER}/ibb/keycloak/
-      KC_HOSTNAME_ADMIN_URL: ${PORTAL_PUBLIC_SERVER}/ibb/keycloak/
+      # Keycloak has its own per-server public URL. The portal does not proxy
+      # it, so species authentication does not depend on the portal.
+      KC_HOSTNAME_URL: ${KEYCLOAK_PUBLIC_URL}/
+      KC_HOSTNAME_ADMIN_URL: ${KEYCLOAK_PUBLIC_URL}/
       KC_HOSTNAME_STRICT: "false"
       KC_HOSTNAME_STRICT_HTTPS: "false"
       KC_HTTP_RELATIVE_PATH: /ibb/keycloak/
@@ -77,6 +77,10 @@ services:
       interval: 10s
       timeout: 10s
       retries: 18
+    ports:
+      # Browser-facing Keycloak. Put a TLS reverse proxy in front in production
+      # and keep KEYCLOAK_PUBLIC_URL on the public URL.
+      - "${KEYCLOAK_HOST_PORT:-8081}:8080"
     networks:
       emobase-infra:
         aliases:
