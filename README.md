@@ -11,11 +11,10 @@ Each server that hosts EMOBase runs its own `emobase-infra`. It provides one
 MySQL and one Keycloak for every portal/species stack on **that server**. The
 portal and species Directus join the shared Docker network and reach MySQL as
 `mysql:3306`; services on the network reach Keycloak as `keycloak:8080`.
-Keycloak also has its own browser-facing URL (`KEYCLOAK_PUBLIC_URL`), so species
-authentication does not depend on the portal.
+Keycloak is also reachable at `KEYCLOAK_PUBLIC_URL`.
 
-Running one MySQL and one Keycloak per server, instead of one pair per stack, is
-what makes several species fit on one machine. Elasticsearch is still per stack.
+Each server runs one MySQL and one Keycloak for all of its stacks. Elasticsearch
+runs per stack.
 
 ```
 Browser ──► portal :9080        Browser ──► Keycloak :8081
