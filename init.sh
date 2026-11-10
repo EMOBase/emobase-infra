@@ -31,8 +31,8 @@ DEFAULT_PORTAL_DIR="../emobase-portal-deploy"
 DEFAULT_KEYCLOAK_REALM="ibb"
 DEFAULT_KEYCLOAK_CLIENT_ID="ibb-client"
 DEFAULT_KEYCLOAK_HOST_PORT=8081
-DEFAULT_KEYCLOAK_PUBLIC_URL="http://localhost:${DEFAULT_KEYCLOAK_HOST_PORT}/ibb/keycloak"
-DEFAULT_KEYCLOAK_INTERNAL_URL="http://keycloak:8080/ibb/keycloak"
+DEFAULT_KEYCLOAK_PUBLIC_URL="http://localhost:${DEFAULT_KEYCLOAK_HOST_PORT}/keycloak"
+DEFAULT_KEYCLOAK_INTERNAL_URL="http://keycloak:8080/keycloak"
 
 fatal() {
   >&2 echo "❌ $1"
@@ -220,7 +220,7 @@ fi
   || fatal "KEYCLOAK_HOST_PORT must be a number between 1 and 65535"
 
 if [[ -z "$KEYCLOAK_PUBLIC_URL" ]]; then
-  default_public="http://localhost:${KEYCLOAK_HOST_PORT}/ibb/keycloak"
+  default_public="http://localhost:${KEYCLOAK_HOST_PORT}/keycloak"
   if [[ "$LOCAL" == true ]] || [[ "$YES" == true ]]; then
     KEYCLOAK_PUBLIC_URL="$default_public"
     if [[ "$LOCAL" != true ]]; then
@@ -235,15 +235,15 @@ fi
 KEYCLOAK_PUBLIC_URL="${KEYCLOAK_PUBLIC_URL%/}"
 [[ "$KEYCLOAK_PUBLIC_URL" =~ ^https?://[^/]+ ]] \
   || fatal "KEYCLOAK_PUBLIC_URL must start with http:// or https://"
-[[ "$KEYCLOAK_PUBLIC_URL" == */ibb/keycloak ]] \
-  || fatal "KEYCLOAK_PUBLIC_URL must end with /ibb/keycloak"
+[[ "$KEYCLOAK_PUBLIC_URL" == */keycloak ]] \
+  || fatal "KEYCLOAK_PUBLIC_URL must end with /keycloak"
 
 KEYCLOAK_INTERNAL_URL="${KEYCLOAK_INTERNAL_URL:-$DEFAULT_KEYCLOAK_INTERNAL_URL}"
 KEYCLOAK_INTERNAL_URL="${KEYCLOAK_INTERNAL_URL%/}"
 [[ "$KEYCLOAK_INTERNAL_URL" =~ ^https?://[^/]+ ]] \
   || fatal "KEYCLOAK_INTERNAL_URL must start with http:// or https://"
-[[ "$KEYCLOAK_INTERNAL_URL" == */ibb/keycloak ]] \
-  || fatal "KEYCLOAK_INTERNAL_URL must end with /ibb/keycloak"
+[[ "$KEYCLOAK_INTERNAL_URL" == */keycloak ]] \
+  || fatal "KEYCLOAK_INTERNAL_URL must end with /keycloak"
 
 KEYCLOAK_REALM="${KEYCLOAK_REALM:-$DEFAULT_KEYCLOAK_REALM}"
 KEYCLOAK_CLIENT_ID="${KEYCLOAK_CLIENT_ID:-$DEFAULT_KEYCLOAK_CLIENT_ID}"

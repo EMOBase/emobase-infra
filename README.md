@@ -45,11 +45,11 @@ species Directus ─────────► mysql:3306
    ```bash
    ./init.sh \
      --portal-server https://portal.example.org \
-     --keycloak-public-url https://auth.example.org/ibb/keycloak
+     --keycloak-public-url https://auth.example.org/keycloak
    ```
 
    For a local trial, `./init.sh --local` uses
-   `http://localhost:8081/ibb/keycloak`. The script reads
+   `http://localhost:8081/keycloak`. The script reads
    `../emobase-portal-deploy/.env` automatically when that checkout exists,
    otherwise use `--portal-server`. It generates all secrets.
 
@@ -153,7 +153,7 @@ docker compose up -d --wait
 ```
 
 This uses `http://localhost:9080` as the portal URL and
-`http://localhost:8081/ibb/keycloak` as the Keycloak URL. Then follow the local
+`http://localhost:8081/keycloak` as the Keycloak URL. Then follow the local
 walkthrough in the
 [EMOBase deployment guide](https://github.com/EMOBase/emobase-docs/blob/main/DEPLOYMENT.md#local-setup-no-public-server).
 If the local species uses the shared realm, register its origin before signing

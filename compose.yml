@@ -51,7 +51,7 @@ services:
       KC_HOSTNAME_ADMIN_URL: ${KEYCLOAK_PUBLIC_URL}/
       KC_HOSTNAME_STRICT: "false"
       KC_HOSTNAME_STRICT_HTTPS: "false"
-      KC_HTTP_RELATIVE_PATH: /ibb/keycloak/
+      KC_HTTP_RELATIVE_PATH: /keycloak/
       KC_HTTP_ENABLED: "true"
       KC_PROXY_HEADERS: xforwarded
       KC_DB: mysql
@@ -73,7 +73,7 @@ services:
       mysql:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "{ printf 'HEAD /ibb/keycloak/health/ready HTTP/1.0\r\n\r\n' >&0; grep -q 'HTTP/1.0 200'; } 0<>/dev/tcp/localhost/8080"]
+      test: ["CMD-SHELL", "{ printf 'HEAD /keycloak/health/ready HTTP/1.0\r\n\r\n' >&0; grep -q 'HTTP/1.0 200'; } 0<>/dev/tcp/localhost/8080"]
       interval: 10s
       timeout: 10s
       retries: 18

@@ -65,7 +65,7 @@ if ! docker compose ps --status running --services 2>/dev/null | grep -qx keyclo
 fi
 
 kcadm config credentials \
-  --server http://localhost:8080/ibb/keycloak \
+  --server http://localhost:8080/keycloak \
   --realm master \
   --user "$KEYCLOAK_ADMIN" \
   --password "$KEYCLOAK_ADMIN_PASSWORD" >/dev/null
