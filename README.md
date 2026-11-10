@@ -140,8 +140,9 @@ Before signing in to the local species site, register its origin:
 
 ## Migrating an existing deployment
 
-This change moves shared state into new volumes. Before removing the old
-containers, dump the databases you want to keep:
+This change moves shared state into new volumes. Run this **before** updating
+the deploy repositories, while their old `mysql` services and volumes still
+exist, and dump the databases you want to keep:
 
 ```bash
 # Old portal stack (genomics + its Keycloak realm)
