@@ -138,36 +138,10 @@ Before signing in to the local species site, register its origin:
 ./scripts/allow-origin.sh http://localhost:9090
 ```
 
-## Migrating an existing deployment
-
-This change moves shared state into new volumes. Run this **before** updating
-the deploy repositories, while their old `mysql` services and volumes still
-exist, and dump the databases you want to keep:
-
-```bash
-# Old portal stack (genomics + its Keycloak realm)
-cd ../emobase-portal-deploy
-docker compose exec -T mysql \
-  sh -c 'exec mysqldump -uroot -p"$MYSQL_ROOT_PASSWORD" --databases emobase_genomics keycloak' \
-  > portal.sql
-
-# Old species stack (Directus)
-cd ../emobase-deploy
-docker compose exec -T mysql \
-  sh -c 'exec mysqldump -uroot -p"$MYSQL_ROOT_PASSWORD" --databases directus' \
-  > directus.sql
-```
-
-Start this stack, then import the dumps with
-`docker compose exec -T mysql mysql -uroot -p"$MYSQL_ROOT_PASSWORD" < file.sql`.
-The old per-stack Keycloak databases cannot be merged automatically: keep one
-realm (usually the portal's) or recreate users, and register each species origin
-with `scripts/allow-origin.sh`.
-
 ## Backups
 
-The MySQL data volume now contains the portal genomics data, the Keycloak
-realm and every species' Directus data. Back up the whole instance:
+The MySQL data volume contains the portal genomics data, the Keycloak realm and
+every species' Directus data. Back up the whole instance:
 
 ```bash
 docker compose exec -T mysql \
