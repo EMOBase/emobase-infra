@@ -5,7 +5,7 @@ Shared services for an EMOBase deployment server:
 | Service | Purpose |
 | --- | --- |
 | `mysql` | One MySQL 8.0 instance for the portal, Keycloak and every species' Directus |
-| `keycloak` | One Keycloak 24 instance with the shared `ibb` realm and `ibb-client` |
+| `keycloak` | One Keycloak 24 instance with the shared portal realm and optional dedicated species realms |
 
 `emobase-portal-deploy` and each `emobase-deploy` species checkout run their
 application containers only. They no longer start their own MySQL or Keycloak.
@@ -44,7 +44,7 @@ issuer and therefore redirect to the portal origin during login.
 ## Prerequisites
 
 - Docker Engine 24+ with Compose v2
-- `python3` for the optional `scripts/allow-origin.sh` helper
+- `python3` for the Keycloak helper scripts (`allow-origin.sh`, `create-realm.sh`)
 - The public portal URL decided before the first start
 
 ## Quick start
@@ -66,8 +66,8 @@ issuer and therefore redirect to the portal origin during login.
 
 3. Deploy the portal with
    [`../emobase-portal-deploy`](../emobase-portal-deploy). Its `init.sh` reads
-   `MYSQL_ROOT_PASSWORD` and `KEYCLOAK_CLIENT_SECRET` from this `.env`, so the
-   two stacks cannot drift.
+   `MYSQL_ROOT_PASSWORD`, `KEYCLOAK_REALM`, `KEYCLOAK_CLIENT_ID` and
+   `KEYCLOAK_CLIENT_SECRET` from this `.env`, so the two stacks cannot drift.
 
 The Keycloak admin console is at
 `<PORTAL_PUBLIC_SERVER>/ibb/keycloak/admin/`, using `KEYCLOAK_ADMIN` and
@@ -75,11 +75,33 @@ The Keycloak admin console is at
 (`COCO_USERNAME` / `COCO_PASSWORD`) can sign in to every portal and species
 site; its password is temporary and must be changed on first login.
 
+## Keycloak realm strategy
+
+The portal always uses the shared realm from this `.env` (`KEYCLOAK_REALM`,
+default `ibb`) and its client (`KEYCLOAK_CLIENT_ID`, default `ibb-client`).
+Each species can choose one of two models during `emobase-deploy/init.sh`:
+
+- **Shared realm** — reuse the portal's realm. One team manages users for the
+  portal and every species. Register the species origin once:
+
+  ```bash
+  ./scripts/allow-origin.sh https://tcas.example.org
+  ```
+
+- **Dedicated realm** — create a separate realm with its own client and seed
+  `coco` user. Use this when different people manage each website. The species
+  `init.sh` creates it automatically, or you can do it manually:
+
+  ```bash
+  ./scripts/create-realm.sh --realm ibb_tcas --origin https://tcas.example.org
+  ```
+
+  A dedicated realm has its own users and administrators. The portal realm is
+  unaffected.
+
 ## Adding a species
 
-Each species deployment needs:
-
-1. Its own Directus database:
+1. Create its own Directus database:
 
    ```bash
    ./scripts/create-database.sh directus_tcas
@@ -88,17 +110,13 @@ Each species deployment needs:
    Use the same name as `DIRECTUS_DB_DATABASE` in the species `.env`.
    `emobase-deploy/init.sh` derives `directus_<species>` automatically.
 
-2. Its public origin registered as a valid Keycloak redirect:
+2. Run the species `init.sh`. It prompts for the Keycloak realm strategy:
 
-   ```bash
-   ./scripts/allow-origin.sh https://tcas.example.org
-   ```
+   - choose shared and then run `allow-origin.sh` for the species URL;
+   - choose dedicated and the realm/client/user are created for you.
 
-   This updates `ibb-client` in the shared `ibb` realm. Run it once per species,
-   before users sign in there. It is safe to run repeatedly.
-
-Then run the species `init.sh` and start its stack. See
-[`../emobase-deploy/README.md`](../emobase-deploy/README.md).
+3. Start the species stack. See
+   [`../emobase-deploy/README.md`](../emobase-deploy/README.md).
 
 To remove a species database after retiring a site:
 
@@ -106,7 +124,8 @@ To remove a species database after retiring a site:
 ./scripts/drop-database.sh directus_tcas
 ```
 
-This permanently deletes the database and asks for confirmation.
+This permanently deletes the database and asks for confirmation. Delete a
+dedicated realm in the Keycloak admin console if it is no longer needed.
 
 ## Environment values shared with the deploy stacks
 
@@ -115,7 +134,10 @@ The deploy stacks' `init.sh` reads these from this `.env`:
 | Variable | Used by |
 | --- | --- |
 | `MYSQL_ROOT_PASSWORD` | Portal genomics API/workers and species Directus |
-| `KEYCLOAK_CLIENT_SECRET` | Portal, species UI and Quarkus services |
+| `KEYCLOAK_REALM` | Portal and shared-realm species |
+| `KEYCLOAK_CLIENT_ID` | Portal and shared-realm species |
+| `KEYCLOAK_CLIENT_SECRET` | Portal and shared-realm species |
+| `COCO_USERNAME` / `COCO_PASSWORD` | Shared-realm seed user |
 | `PORTAL_PUBLIC_SERVER` | Confirms the portal URL and Keycloak issuer |
 | `EMOBASE_INFRA_NETWORK` | External Docker network name |
 
@@ -132,7 +154,8 @@ docker compose up -d --wait
 This uses `http://localhost:9080` as the portal URL. Then follow the local
 walkthrough in
 [`../emobase-portal-deploy/DEPLOYMENT.md`](../emobase-portal-deploy/DEPLOYMENT.md).
-Before signing in to the local species site, register its origin:
+If the local species uses the shared realm, register its origin before signing
+in; a dedicated realm is configured by the species `init.sh`:
 
 ```bash
 ./scripts/allow-origin.sh http://localhost:9090

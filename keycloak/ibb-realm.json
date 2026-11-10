@@ -1,9 +1,9 @@
 {
-  "realm": "ibb",
+  "realm": "${KEYCLOAK_REALM}",
   "enabled": true,
   "clients": [
     {
-      "clientId": "ibb-client",
+      "clientId": "${KEYCLOAK_CLIENT_ID}",
       "enabled": true,
       "publicClient": false,
       "secret": "${KEYCLOAK_CLIENT_SECRET}",
@@ -36,7 +36,7 @@
           "temporary": true
         }
       ],
-      "realmRoles": ["default-roles-ibb"],
+      "realmRoles": ["default-roles-${KEYCLOAK_REALM}"],
       "groups": ["coco"]
     }
   ]

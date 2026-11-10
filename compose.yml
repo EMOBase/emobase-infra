@@ -4,7 +4,7 @@ name: emobase-infra
 #
 # This stack runs the services that every portal/species deployment uses:
 #   * MySQL           - databases for the portal, Keycloak and Directus
-#   * Keycloak        - the shared ibb realm and ibb-client
+#   * Keycloak        - the shared portal realm plus optional species realms
 #
 # The deploy stacks (emobase-portal-deploy and emobase-deploy) join the
 # external network below and reach MySQL and Keycloak by their service names.
@@ -62,6 +62,8 @@ services:
       KC_DB_PASSWORD: ${MYSQL_ROOT_PASSWORD}
       KC_DB_SCHEMA: keycloak
       # Consumed by keycloak/ibb-realm.json during --import-realm.
+      KEYCLOAK_REALM: ${KEYCLOAK_REALM:-ibb}
+      KEYCLOAK_CLIENT_ID: ${KEYCLOAK_CLIENT_ID:-ibb-client}
       KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET}
       PORTAL_PUBLIC_SERVER: ${PORTAL_PUBLIC_SERVER}
       COCO_USERNAME: ${COCO_USERNAME:-coco}

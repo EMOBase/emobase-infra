@@ -1,13 +1,16 @@
 #!/usr/bin/env bash
-# Allow one or more public origins to sign in through the shared Keycloak.
+# Allow one or more public origins to sign in through the shared Keycloak realm.
 #
 # Usage:
 #   ./scripts/allow-origin.sh https://tcas.example.org
 #   ./scripts/allow-origin.sh https://tcas.example.org https://dmel.example.org
 #
-# The portal origin is imported with the realm automatically. Every species
-# site must be registered here once, before users sign in on that site. The
-# script is idempotent: running it again with the same origin changes nothing.
+# Use this only for species that reuse the portal's shared realm. A species
+# with a dedicated realm is configured by create-realm.sh instead.
+#
+# The portal origin is imported with the realm automatically. Every
+# shared-realm species origin must be registered here once, before users sign
+# in on that site. The script is idempotent.
 #
 # Requires python3 on the Docker host and a running Keycloak container.
 
@@ -45,6 +48,10 @@ KEYCLOAK_ADMIN_PASSWORD=$(read_env_value .env KEYCLOAK_ADMIN_PASSWORD || true)
   echo "❌ .env has no KEYCLOAK_ADMIN_PASSWORD; re-run ./init.sh." >&2
   exit 1
 }
+KEYCLOAK_REALM=$(read_env_value .env KEYCLOAK_REALM || true)
+KEYCLOAK_REALM="${KEYCLOAK_REALM:-ibb}"
+KEYCLOAK_CLIENT_ID=$(read_env_value .env KEYCLOAK_CLIENT_ID || true)
+KEYCLOAK_CLIENT_ID="${KEYCLOAK_CLIENT_ID:-ibb-client}"
 
 kcadm() {
   docker compose exec -T keycloak /opt/keycloak/bin/kcadm.sh "$@"
@@ -63,14 +70,14 @@ kcadm config credentials \
   --user "$KEYCLOAK_ADMIN" \
   --password "$KEYCLOAK_ADMIN_PASSWORD" >/dev/null
 
-client_id=$(kcadm get clients -r ibb -q clientId=ibb-client --fields id --format csv --noquotes \
+client_id=$(kcadm get clients -r "$KEYCLOAK_REALM" -q clientId="$KEYCLOAK_CLIENT_ID" --fields id --format csv --noquotes \
   | tail -n1 | tr -d '\r')
 if [[ -z "$client_id" ]]; then
-  echo "❌ Client 'ibb-client' was not found in realm 'ibb'." >&2
+  echo "❌ Client '${KEYCLOAK_CLIENT_ID}' was not found in realm '${KEYCLOAK_REALM}'." >&2
   exit 1
 fi
 
-current=$(kcadm get "clients/$client_id" -r ibb --fields redirectUris,webOrigins --format json)
+current=$(kcadm get "clients/$client_id" -r "$KEYCLOAK_REALM" --fields redirectUris,webOrigins --format json)
 
 {
   read -r redirects
@@ -94,11 +101,11 @@ print(json.dumps(redirects))
 print(json.dumps(origins))
 ' "$@")
 
-kcadm update "clients/$client_id" -r ibb \
+kcadm update "clients/$client_id" -r "$KEYCLOAK_REALM" \
   -s "redirectUris=$redirects" \
   -s "webOrigins=$origins"
 
-echo "✅ Keycloak now accepts sign-in redirects from:"
+echo "✅ Realm '${KEYCLOAK_REALM}' now accepts sign-in redirects from:"
 for origin in "$@"; do
   echo "   - ${origin%/}"
 done
