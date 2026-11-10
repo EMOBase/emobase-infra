@@ -152,8 +152,8 @@ docker compose up -d --wait
 ```
 
 This uses `http://localhost:9080` as the portal URL. Then follow the local
-walkthrough in
-[`../emobase-portal-deploy/DEPLOYMENT.md`](../emobase-portal-deploy/DEPLOYMENT.md).
+walkthrough in the
+[EMOBase deployment guide](https://github.com/EMOBase/emobase-docs/blob/main/DEPLOYMENT.md#local-setup-no-public-server).
 If the local species uses the shared realm, register its origin before signing
 in; a dedicated realm is configured by the species `init.sh`:
 
