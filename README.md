@@ -65,7 +65,7 @@ issuer and therefore redirect to the portal origin during login.
    ```
 
 3. Deploy the portal with
-   [`../emobase-portal-deploy`](../emobase-portal-deploy). Its `init.sh` reads
+   [`emobase-portal-deploy`](https://github.com/EMOBase/emobase-portal-deploy). Its `init.sh` reads
    `MYSQL_ROOT_PASSWORD`, `KEYCLOAK_REALM`, `KEYCLOAK_CLIENT_ID` and
    `KEYCLOAK_CLIENT_SECRET` from this `.env`, so the two stacks cannot drift.
 
@@ -116,7 +116,7 @@ Each species can choose one of two models during `emobase-deploy/init.sh`:
    - choose dedicated and the realm/client/user are created for you.
 
 3. Start the species stack. See
-   [`../emobase-deploy/README.md`](../emobase-deploy/README.md).
+   [`emobase-deploy/README.md`](https://github.com/EMOBase/emobase-deploy/blob/dev/README.md).
 
 To remove a species database after retiring a site:
 
