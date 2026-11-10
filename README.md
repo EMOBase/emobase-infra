@@ -59,11 +59,10 @@ species Directus ─────────► mysql:3306
    docker compose up -d --wait
    ```
 
-3. Deploy the portal with
-   [`emobase-portal-deploy`](https://github.com/EMOBase/emobase-portal-deploy). Its `init.sh` reads
-   `MYSQL_ROOT_PASSWORD`, `KEYCLOAK_PUBLIC_URL`, `KEYCLOAK_INTERNAL_URL`,
-   `KEYCLOAK_REALM`, `KEYCLOAK_CLIENT_ID` and `KEYCLOAK_CLIENT_SECRET` from this
-   `.env`, so the two stacks cannot drift.
+3. Deploy the portal and species stacks. Their `init.sh` reads the shared
+   values from this `.env`; see the
+   [deployment guide](https://github.com/EMOBase/emobase-docs/blob/main/DEPLOYMENT.md)
+   for the full order.
 
 The Keycloak admin console is at `${KEYCLOAK_PUBLIC_URL}/admin/`, using
 `KEYCLOAK_ADMIN` and `KEYCLOAK_ADMIN_PASSWORD` from this `.env`. The seeded
@@ -95,24 +94,19 @@ Each species can choose one of two models during `emobase-deploy/init.sh`:
   A dedicated realm has its own users and administrators. The portal realm is
   unaffected.
 
-## Adding a species
+## Species database and realm
 
-1. Create its own Directus database:
+During species deployment, this stack provides:
 
-   ```bash
-   ./scripts/create-database.sh directus_tcas
-   ```
+```bash
+./scripts/create-database.sh directus_tcas
+./scripts/allow-origin.sh https://tcas.example.org   # shared realm
+./scripts/create-realm.sh --realm ibb_tcas --origin https://tcas.example.org  # dedicated realm
+```
 
-   Use the same name as `DIRECTUS_DB_DATABASE` in the species `.env`.
-   `emobase-deploy/init.sh` derives `directus_<species>` automatically.
-
-2. Run the species `init.sh`. It prompts for the Keycloak realm strategy:
-
-   - choose shared and then run `allow-origin.sh` for the species URL;
-   - choose dedicated and the realm/client/user are created for you.
-
-3. Start the species stack. See
-   [`emobase-deploy/README.md`](https://github.com/EMOBase/emobase-deploy/blob/dev/README.md).
+Use the same database name as `DIRECTUS_DB_DATABASE` in the species `.env`.
+The [deployment guide](https://github.com/EMOBase/emobase-docs/blob/main/DEPLOYMENT.md)
+covers the full species setup order.
 
 To remove a species database after retiring a site:
 
@@ -120,8 +114,8 @@ To remove a species database after retiring a site:
 ./scripts/drop-database.sh directus_tcas
 ```
 
-This permanently deletes the database and asks for confirmation. Delete a
-dedicated realm in the Keycloak admin console if it is no longer needed.
+Delete a dedicated realm in the Keycloak admin console when it is no longer
+needed.
 
 ## Environment values shared with the deploy stacks
 
@@ -152,16 +146,9 @@ server runs a portal. On a species-only server it can be any initial origin
 docker compose up -d --wait
 ```
 
-This uses `http://localhost:9080` as the portal URL and
-`http://localhost:8081/keycloak` as the Keycloak URL. Then follow the local
-walkthrough in the
+This starts Keycloak at `http://localhost:8081/keycloak`. For the full local
+walkthrough including the portal and species stacks, see the
 [EMOBase deployment guide](https://github.com/EMOBase/emobase-docs/blob/main/DEPLOYMENT.md#local-setup-no-public-server).
-If the local species uses the shared realm, register its origin before signing
-in; a dedicated realm is configured by the species `init.sh`:
-
-```bash
-./scripts/allow-origin.sh http://localhost:9090
-```
 
 ## Backups
 
