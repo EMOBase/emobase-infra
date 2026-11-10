@@ -1,0 +1,90 @@
+name: emobase-infra
+
+# Shared infrastructure for EMOBase deployments.
+#
+# This stack runs the services that every portal/species deployment uses:
+#   * MySQL           - databases for the portal, Keycloak and Directus
+#   * Keycloak        - the shared ibb realm and ibb-client
+#
+# The deploy stacks (emobase-portal-deploy and emobase-deploy) join the
+# external network below and reach MySQL and Keycloak by their service names.
+# Keycloak is exposed to browsers through the portal nginx at
+# <PORTAL_PUBLIC_SERVER>/ibb/keycloak/.
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: emobase-infra-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      # Allow the portal/species containers to connect as root over the
+      # shared Docker network.
+      MYSQL_ROOT_HOST: "%"
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./mysql/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -u root -p$$MYSQL_ROOT_PASSWORD --silent"]
+      interval: 10s
+      timeout: 10s
+      retries: 18
+    networks:
+      emobase-infra:
+        aliases:
+          - mysql
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:24.0.3
+    container_name: emobase-infra-keycloak
+    restart: unless-stopped
+    command: ["start", "--import-realm", "--health-enabled=true"]
+    volumes:
+      - ./keycloak/ibb-realm.json:/opt/keycloak/data/import/ibb-realm.json:ro
+    environment:
+      KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN:-admin}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
+      # Keycloak is only reachable through the portal nginx. Keeping one
+      # canonical public URL makes redirects and the issuer claim consistent
+      # for the portal and every species site.
+      KC_HOSTNAME_URL: ${PORTAL_PUBLIC_SERVER}/ibb/keycloak/
+      KC_HOSTNAME_ADMIN_URL: ${PORTAL_PUBLIC_SERVER}/ibb/keycloak/
+      KC_HOSTNAME_STRICT: "false"
+      KC_HOSTNAME_STRICT_HTTPS: "false"
+      KC_HTTP_RELATIVE_PATH: /ibb/keycloak/
+      KC_HTTP_ENABLED: "true"
+      KC_PROXY_HEADERS: xforwarded
+      KC_DB: mysql
+      KC_DB_URL_HOST: mysql
+      KC_DB_URL_PORT: 3306
+      KC_DB_URL_DATABASE: keycloak
+      KC_DB_USERNAME: root
+      KC_DB_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      KC_DB_SCHEMA: keycloak
+      # Consumed by keycloak/ibb-realm.json during --import-realm.
+      KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET}
+      PORTAL_PUBLIC_SERVER: ${PORTAL_PUBLIC_SERVER}
+      COCO_USERNAME: ${COCO_USERNAME:-coco}
+      COCO_PASSWORD: ${COCO_PASSWORD}
+      JAVA_OPTS: ${KEYCLOAK_JAVA_OPTS:--Xms256m -Xmx768m}
+    depends_on:
+      mysql:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "{ printf 'HEAD /ibb/keycloak/health/ready HTTP/1.0\r\n\r\n' >&0; grep -q 'HTTP/1.0 200'; } 0<>/dev/tcp/localhost/8080"]
+      interval: 10s
+      timeout: 10s
+      retries: 18
+    networks:
+      emobase-infra:
+        aliases:
+          - keycloak
+
+volumes:
+  mysql-data:
+
+networks:
+  emobase-infra:
+    # The deploy stacks declare this network as external and must use the same
+    # name (EMOBASE_INFRA_NETWORK).
+    name: ${EMOBASE_INFRA_NETWORK:-emobase-infra}
