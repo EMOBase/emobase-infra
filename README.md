@@ -22,16 +22,18 @@ several species fit on a single server. Elasticsearch is still per stack.
 Browser ───────────►│ emobase-portal-deploy :9080  │
                     │  nginx ──► /ibb/keycloak/ ───┼──┐
                     └──────────────────────────────┘  │
-                                                      │  shared network
-                    ┌──────────────────────────────┐  │  (emobase-infra)
-                    │ emobase-deploy :9090        │  │
-                    │  UI, Directus, Quarkus ... ──┼──┤
+                           ▲                          │ shared network
+                           │ Keycloak via portal      │ (emobase-infra)
+                    ┌──────┴───────────────────────┐  │
+                    │ emobase-deploy :9090         │  │
+                    │  UI / Quarkus ───────────────┘  │
+                    │  Directus ──────────────────────┼──► mysql
                     └──────────────────────────────┘  │
                                                       ▼
                     ┌─────────────────────────────────────────┐
                     │ emobase-infra                           │
                     │  keycloak :8080  ◄──────────────────────┘
-                    │  mysql :3306                            │
+                    │  mysql :3306    ◄── species Directus    │
                     └─────────────────────────────────────────┘
 ```
 

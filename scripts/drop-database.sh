@@ -16,10 +16,19 @@ if [[ ! -f .env ]]; then
   exit 1
 fi
 
-set -a
-# shellcheck disable=SC1091
-. ./.env
-set +a
+read_env_value() {
+  local file="$1" key="$2" value
+  value=$(grep -E "^${key}=" "$file" | tail -n1 | cut -d= -f2- | tr -d '\r')
+  value=${value#\"}; value=${value%\"}
+  value=${value#\'}; value=${value%\'}
+  printf '%s\n' "$value"
+}
+
+MYSQL_ROOT_PASSWORD=$(read_env_value .env MYSQL_ROOT_PASSWORD || true)
+[[ -n "$MYSQL_ROOT_PASSWORD" ]] || {
+  echo "❌ .env has no MYSQL_ROOT_PASSWORD; re-run ./init.sh." >&2
+  exit 1
+}
 
 assume_yes=false
 if [[ "${1:-}" == "--yes" ]]; then

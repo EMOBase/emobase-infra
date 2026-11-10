@@ -199,7 +199,7 @@ COCO_USERNAME=coco
 COCO_PASSWORD=$(generate_password)
 
 # ── Keycloak runtime ────────────────────────────────────────────────────────
-KEYCLOAK_JAVA_OPTS=-Xms256m -Xmx768m"
+KEYCLOAK_JAVA_OPTS=\"-Xms256m -Xmx768m\""
 
 if [[ "$PRINT" == true ]]; then
   echo "$ENV_CONTENT"

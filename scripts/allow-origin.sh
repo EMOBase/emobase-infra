@@ -30,10 +30,21 @@ if [[ $# -eq 0 ]]; then
   exit 1
 fi
 
-set -a
-# shellcheck disable=SC1091
-. ./.env
-set +a
+read_env_value() {
+  local file="$1" key="$2" value
+  value=$(grep -E "^${key}=" "$file" | tail -n1 | cut -d= -f2- | tr -d '\r')
+  value=${value#\"}; value=${value%\"}
+  value=${value#\'}; value=${value%\'}
+  printf '%s\n' "$value"
+}
+
+KEYCLOAK_ADMIN=$(read_env_value .env KEYCLOAK_ADMIN || true)
+KEYCLOAK_ADMIN="${KEYCLOAK_ADMIN:-admin}"
+KEYCLOAK_ADMIN_PASSWORD=$(read_env_value .env KEYCLOAK_ADMIN_PASSWORD || true)
+[[ -n "$KEYCLOAK_ADMIN_PASSWORD" ]] || {
+  echo "❌ .env has no KEYCLOAK_ADMIN_PASSWORD; re-run ./init.sh." >&2
+  exit 1
+}
 
 kcadm() {
   docker compose exec -T keycloak /opt/keycloak/bin/kcadm.sh "$@"
