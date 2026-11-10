@@ -235,11 +235,15 @@ fi
 KEYCLOAK_PUBLIC_URL="${KEYCLOAK_PUBLIC_URL%/}"
 [[ "$KEYCLOAK_PUBLIC_URL" =~ ^https?://[^/]+ ]] \
   || fatal "KEYCLOAK_PUBLIC_URL must start with http:// or https://"
+[[ "$KEYCLOAK_PUBLIC_URL" == */ibb/keycloak ]] \
+  || fatal "KEYCLOAK_PUBLIC_URL must end with /ibb/keycloak"
 
 KEYCLOAK_INTERNAL_URL="${KEYCLOAK_INTERNAL_URL:-$DEFAULT_KEYCLOAK_INTERNAL_URL}"
 KEYCLOAK_INTERNAL_URL="${KEYCLOAK_INTERNAL_URL%/}"
 [[ "$KEYCLOAK_INTERNAL_URL" =~ ^https?://[^/]+ ]] \
   || fatal "KEYCLOAK_INTERNAL_URL must start with http:// or https://"
+[[ "$KEYCLOAK_INTERNAL_URL" == */ibb/keycloak ]] \
+  || fatal "KEYCLOAK_INTERNAL_URL must end with /ibb/keycloak"
 
 KEYCLOAK_REALM="${KEYCLOAK_REALM:-$DEFAULT_KEYCLOAK_REALM}"
 KEYCLOAK_CLIENT_ID="${KEYCLOAK_CLIENT_ID:-$DEFAULT_KEYCLOAK_CLIENT_ID}"
