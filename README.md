@@ -42,15 +42,18 @@ species Directus ─────────► mysql:3306
 1. Generate `.env`:
 
    ```bash
-   ./init.sh \
-     --portal-server https://portal.example.org \
-     --keycloak-public-url https://auth.example.org/keycloak
+   ./init.sh
    ```
 
+   The script asks in order for the portal URL, shared Docker network, Keycloak
+   host port, browser-facing and container-facing Keycloak URLs, shared realm
+   and client ID. Every question shows a default; press Enter to accept it.
+   The script reads `../emobase-portal-deploy/.env` automatically when that
+   checkout exists. It generates all secrets.
+
    For a local trial, `./init.sh --local` uses
-   `http://localhost:8081/keycloak`. The script reads
-   `../emobase-portal-deploy/.env` automatically when that checkout exists,
-   otherwise use `--portal-server`. It generates all secrets.
+   `http://localhost:8081/keycloak`. For automation, pass the matching flags
+   or `--yes` to accept every default without prompting.
 
 2. Start the shared services and wait for their health checks:
 

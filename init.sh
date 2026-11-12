@@ -31,12 +31,33 @@ DEFAULT_PORTAL_DIR="../emobase-portal-deploy"
 DEFAULT_KEYCLOAK_REALM="ibb"
 DEFAULT_KEYCLOAK_CLIENT_ID="ibb-client"
 DEFAULT_KEYCLOAK_HOST_PORT=8081
-DEFAULT_KEYCLOAK_PUBLIC_URL="http://localhost:${DEFAULT_KEYCLOAK_HOST_PORT}/keycloak"
 DEFAULT_KEYCLOAK_INTERNAL_URL="http://keycloak:8080/keycloak"
 
 fatal() {
   >&2 echo "❌ $1"
   exit 1
+}
+
+# ask VAR "label" "default"
+# Keeps an explicit flag or discovered value; otherwise asks with a default.
+# --yes uses the default without prompting. A non-terminal without --yes aborts
+# instead of silently generating a configuration nobody confirmed.
+ask() {
+  local var="$1" label="$2" default="$3" value
+  [[ -n "${!var:-}" ]] && return 0
+  if [[ "$YES" == true ]]; then
+    printf -v "$var" '%s' "$default"
+    return 0
+  fi
+  if [[ ! -t 0 ]]; then
+    fatal "Cannot ask for ${label}: stdin is not a terminal. Pass --yes or the matching option."
+  fi
+  if [[ -n "$default" ]]; then
+    read -rp "${label} [${default}]: " value
+  else
+    read -rp "${label}: " value
+  fi
+  printf -v "$var" '%s' "${value:-$default}"
 }
 
 generate_secret_key() {
@@ -68,13 +89,15 @@ generate_password() {
 
 usage() {
   echo "Usage: $0 [-f|--force] [-p|--print] [-y|--yes] [--local] [--portal-server URL] [--portal-dir DIR] [--infra-network NAME] [--keycloak-public-url URL] [--keycloak-internal-url URL] [--keycloak-host-port PORT] [--keycloak-realm NAME] [--keycloak-client-id ID]"
+  echo "Without options, asks each value in order and shows its default."
   echo "  --portal-server     Public portal origin, if this server runs one"
   echo "                      (default: ${DEFAULT_PORTAL_SERVER})"
   echo "  --portal-dir        Portal checkout whose .env holds PUBLIC_SERVER"
   echo "                      (default: ${DEFAULT_PORTAL_DIR} when present)"
   echo "  --infra-network     Docker network shared with the deploy stacks (default: ${DEFAULT_INFRA_NETWORK})"
   echo "  --keycloak-public-url"
-  echo "                      Browser-facing Keycloak base URL (default: ${DEFAULT_KEYCLOAK_PUBLIC_URL})"
+  echo "                      Browser-facing Keycloak base URL"
+  echo "                      (default: http://localhost:<keycloak-host-port>/keycloak)"
   echo "  --keycloak-internal-url"
   echo "                      Container-facing Keycloak base URL on the shared network"
   echo "                      (default: ${DEFAULT_KEYCLOAK_INTERNAL_URL})"
@@ -186,11 +209,8 @@ if [[ -z "$PORTAL_SERVER" ]]; then
     [[ -n "$PORTAL_SERVER" ]] \
       || fatal "Could not read PUBLIC_SERVER from ${PORTAL_DIR}/.env; pass --portal-server URL"
     >&2 echo "🔗 Using portal URL from ${PORTAL_DIR}/.env"
-  elif [[ "$YES" == true ]]; then
-    PORTAL_SERVER=${DEFAULT_PORTAL_SERVER}
   else
-    read -rp "🌐 Public URL of the portal, if this server runs one [${DEFAULT_PORTAL_SERVER}]: " PORTAL_SERVER
-    PORTAL_SERVER="${PORTAL_SERVER:-${DEFAULT_PORTAL_SERVER}}"
+    ask PORTAL_SERVER "🌐 Public URL of the portal, if this server runs one" "$DEFAULT_PORTAL_SERVER"
   fi
 fi
 PORTAL_SERVER="${PORTAL_SERVER%/}"
@@ -203,34 +223,21 @@ if [[ -n "$PORTAL_DIR" ]]; then
   fi
 fi
 
-if [[ -z "$INFRA_NETWORK" ]]; then
-  if [[ "$YES" == true ]]; then
-    INFRA_NETWORK=${DEFAULT_INFRA_NETWORK}
-  else
-    read -rp "🔌 Shared Docker network [${DEFAULT_INFRA_NETWORK}]: " INFRA_NETWORK
-    INFRA_NETWORK="${INFRA_NETWORK:-${DEFAULT_INFRA_NETWORK}}"
-  fi
-fi
+ask INFRA_NETWORK "🔌 Shared Docker network" "$DEFAULT_INFRA_NETWORK"
 [[ "$INFRA_NETWORK" =~ ^[a-zA-Z0-9_.-]+$ ]] || fatal "EMOBASE_INFRA_NETWORK contains invalid characters"
 
-if [[ -z "$KEYCLOAK_HOST_PORT" ]]; then
-  KEYCLOAK_HOST_PORT=$DEFAULT_KEYCLOAK_HOST_PORT
-fi
+ask KEYCLOAK_HOST_PORT "🔌 Host port for Keycloak" "$DEFAULT_KEYCLOAK_HOST_PORT"
 [[ "$KEYCLOAK_HOST_PORT" =~ ^[0-9]+$ ]] && (( 10#$KEYCLOAK_HOST_PORT >= 1 && 10#$KEYCLOAK_HOST_PORT <= 65535 )) \
   || fatal "KEYCLOAK_HOST_PORT must be a number between 1 and 65535"
 
-if [[ -z "$KEYCLOAK_PUBLIC_URL" ]]; then
-  default_public="http://localhost:${KEYCLOAK_HOST_PORT}/keycloak"
-  if [[ "$LOCAL" == true ]] || [[ "$YES" == true ]]; then
-    KEYCLOAK_PUBLIC_URL="$default_public"
-    if [[ "$LOCAL" != true ]]; then
-      >&2 echo "⚠️  KEYCLOAK_PUBLIC_URL defaults to ${KEYCLOAK_PUBLIC_URL}."
-      >&2 echo "   Set --keycloak-public-url for a real server."
-    fi
-  else
-    read -rp "🌐 Browser-facing Keycloak URL [${default_public}]: " KEYCLOAK_PUBLIC_URL
-    KEYCLOAK_PUBLIC_URL="${KEYCLOAK_PUBLIC_URL:-$default_public}"
-  fi
+default_public="http://localhost:${KEYCLOAK_HOST_PORT}/keycloak"
+if [[ "$LOCAL" == true ]]; then
+  KEYCLOAK_PUBLIC_URL="${KEYCLOAK_PUBLIC_URL:-$default_public}"
+fi
+ask KEYCLOAK_PUBLIC_URL "🌐 Browser-facing Keycloak URL" "$default_public"
+if [[ "$KEYCLOAK_PUBLIC_URL" == *localhost* ]] && [[ "$LOCAL" != true ]]; then
+  >&2 echo "⚠️  KEYCLOAK_PUBLIC_URL points at localhost."
+  >&2 echo "   Set --keycloak-public-url for a real server."
 fi
 KEYCLOAK_PUBLIC_URL="${KEYCLOAK_PUBLIC_URL%/}"
 [[ "$KEYCLOAK_PUBLIC_URL" =~ ^https?://[^/]+ ]] \
@@ -238,15 +245,15 @@ KEYCLOAK_PUBLIC_URL="${KEYCLOAK_PUBLIC_URL%/}"
 [[ "$KEYCLOAK_PUBLIC_URL" == */keycloak ]] \
   || fatal "KEYCLOAK_PUBLIC_URL must end with /keycloak"
 
-KEYCLOAK_INTERNAL_URL="${KEYCLOAK_INTERNAL_URL:-$DEFAULT_KEYCLOAK_INTERNAL_URL}"
+ask KEYCLOAK_INTERNAL_URL "🔗 Container-facing Keycloak URL" "$DEFAULT_KEYCLOAK_INTERNAL_URL"
 KEYCLOAK_INTERNAL_URL="${KEYCLOAK_INTERNAL_URL%/}"
 [[ "$KEYCLOAK_INTERNAL_URL" =~ ^https?://[^/]+ ]] \
   || fatal "KEYCLOAK_INTERNAL_URL must start with http:// or https://"
 [[ "$KEYCLOAK_INTERNAL_URL" == */keycloak ]] \
   || fatal "KEYCLOAK_INTERNAL_URL must end with /keycloak"
 
-KEYCLOAK_REALM="${KEYCLOAK_REALM:-$DEFAULT_KEYCLOAK_REALM}"
-KEYCLOAK_CLIENT_ID="${KEYCLOAK_CLIENT_ID:-$DEFAULT_KEYCLOAK_CLIENT_ID}"
+ask KEYCLOAK_REALM "🏰 Shared Keycloak realm" "$DEFAULT_KEYCLOAK_REALM"
+ask KEYCLOAK_CLIENT_ID "🔑 Shared Keycloak client ID" "$DEFAULT_KEYCLOAK_CLIENT_ID"
 [[ "$KEYCLOAK_REALM" =~ ^[a-zA-Z0-9_.-]+$ ]] || fatal "KEYCLOAK_REALM contains invalid characters"
 [[ "$KEYCLOAK_CLIENT_ID" =~ ^[a-zA-Z0-9_.-]+$ ]] || fatal "KEYCLOAK_CLIENT_ID contains invalid characters"
 
