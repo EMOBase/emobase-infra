@@ -1,17 +1,18 @@
 #!/usr/bin/env bash
-# Create (or update) a dedicated Keycloak realm for one species deployment.
+# Create (or update) a Keycloak realm with one browser origin.
 #
 # Usage:
 #   ./scripts/create-realm.sh --realm ibb_tcas --origin https://tcas.example.org
-#   ./scripts/create-realm.sh --realm ibb_tcas --origin https://tcas.example.org \
+#   ./scripts/create-realm.sh --realm ibb --origin https://portal.example.org \
 #     --client-id ibb-client --client-secret ... --coco-password ...
 #
-# A dedicated realm gives one species its own users and administrators. Use
-# scripts/allow-origin.sh instead when the species should share the portal's
-# realm and user directory.
+# A dedicated realm gives one species its own users and administrators.
+# scripts/ensure-shared-realm.sh uses this script for the shared portal realm.
+# Use scripts/allow-origin.sh to add another shared-realm origin.
 #
 # The script is safe to re-run: it updates the client secret, adds the origin
-# if missing, and resets the seed user's temporary password.
+# if missing, and resets the seed user's temporary password unless
+# --keep-password is set.
 #
 # Requires python3 on the Docker host and a running Keycloak container.
 
@@ -58,7 +59,7 @@ generate_password() {
 }
 
 usage() {
-  echo "Usage: $0 --realm REALM --origin ORIGIN [--client-id ID] [--client-secret SECRET] [--coco-username USER] [--coco-password PASSWORD]" >&2
+  echo "Usage: $0 --realm REALM --origin ORIGIN [--client-id ID] [--client-secret SECRET] [--coco-username USER] [--coco-password PASSWORD] [--keep-password] [--quiet]" >&2
 }
 
 REALM=
@@ -67,6 +68,8 @@ CLIENT_ID=ibb-client
 CLIENT_SECRET=
 COCO_USERNAME=coco
 COCO_PASSWORD=
+KEEP_PASSWORD=false
+QUIET=false
 
 while [[ $# -gt 0 ]]; do
   case $1 in
@@ -93,6 +96,14 @@ while [[ $# -gt 0 ]]; do
     --coco-password)
       COCO_PASSWORD="$2"
       shift 2
+      ;;
+    --keep-password)
+      KEEP_PASSWORD=true
+      shift
+      ;;
+    --quiet)
+      QUIET=true
+      shift
       ;;
     -h|--help)
       usage
@@ -201,22 +212,28 @@ fi
 user_uuid=$(kcadm get users -r "$REALM" -q username="$COCO_USERNAME" \
   --fields id --format csv --noquotes | tail -n1 | tr -d '\r')
 
+user_created=false
 if [[ -z "$user_uuid" ]]; then
   kcadm create users -r "$REALM" \
     -s username="$COCO_USERNAME" \
     -s enabled=true \
     -s emailVerified=true >/dev/null
+  user_created=true
   echo "✅ Created seed user '$COCO_USERNAME'."
+elif [[ "$KEEP_PASSWORD" == true ]]; then
+  echo "ℹ️  Seed user '$COCO_USERNAME' already exists; keeping its password."
 else
   echo "ℹ️  Seed user '$COCO_USERNAME' already exists; resetting its password."
 fi
 
-kcadm set-password -r "$REALM" \
-  --username "$COCO_USERNAME" \
-  --new-password "$COCO_PASSWORD" \
-  --temporary >/dev/null
+if [[ "$user_created" == true || "$KEEP_PASSWORD" != true ]]; then
+  kcadm set-password -r "$REALM" \
+    --username "$COCO_USERNAME" \
+    --new-password "$COCO_PASSWORD" \
+    --temporary >/dev/null
+fi
 
-# Same user-management permissions as the imported shared-realm coco group.
+# User-management permissions for the seed user.
 for role in manage-users view-users query-users; do
   kcadm add-roles -r "$REALM" \
     --uusername "$COCO_USERNAME" \
@@ -229,9 +246,15 @@ kcadm add-roles -r "$REALM" \
 
 cat <<EOF
 
-✅ Dedicated realm '${REALM}' is ready.
+✅ Realm '${REALM}' is ready.
    Origin:        ${ORIGIN}
    Client ID:     ${CLIENT_ID}
-   Client secret: ${CLIENT_SECRET}
-   Seed user:     ${COCO_USERNAME} / ${COCO_PASSWORD} (temporary)
 EOF
+if [[ "$QUIET" != true ]]; then
+  echo "   Client secret: ${CLIENT_SECRET}"
+  if [[ "$user_created" == true || "$KEEP_PASSWORD" != true ]]; then
+    echo "   Seed user:     ${COCO_USERNAME} / ${COCO_PASSWORD} (temporary)"
+  else
+    echo "   Seed user:     ${COCO_USERNAME} (existing password kept)"
+  fi
+fi

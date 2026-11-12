@@ -39,9 +39,7 @@ services:
     image: quay.io/keycloak/keycloak:24.0.3
     container_name: emobase-infra-keycloak
     restart: unless-stopped
-    command: ["start", "--import-realm", "--health-enabled=true"]
-    volumes:
-      - ./keycloak/ibb-realm.json:/opt/keycloak/data/import/ibb-realm.json:ro
+    command: ["start", "--health-enabled=true"]
     environment:
       KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN:-admin}
       KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
@@ -61,13 +59,6 @@ services:
       KC_DB_USERNAME: root
       KC_DB_PASSWORD: ${MYSQL_ROOT_PASSWORD}
       KC_DB_SCHEMA: keycloak
-      # Consumed by keycloak/ibb-realm.json during --import-realm.
-      KEYCLOAK_REALM: ${KEYCLOAK_REALM:-ibb}
-      KEYCLOAK_CLIENT_ID: ${KEYCLOAK_CLIENT_ID:-ibb-client}
-      KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET}
-      PORTAL_PUBLIC_SERVER: ${PORTAL_PUBLIC_SERVER}
-      COCO_USERNAME: ${COCO_USERNAME:-coco}
-      COCO_PASSWORD: ${COCO_PASSWORD}
       JAVA_OPTS: ${KEYCLOAK_JAVA_OPTS:--Xms256m -Xmx768m}
     depends_on:
       mysql:

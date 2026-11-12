@@ -5,12 +5,13 @@
 #   ./scripts/allow-origin.sh https://tcas.example.org
 #   ./scripts/allow-origin.sh https://tcas.example.org https://dmel.example.org
 #
-# Use this only for species that reuse the portal's shared realm. A species
-# with a dedicated realm is configured by create-realm.sh instead.
+# Use this for species that reuse the portal's shared realm. A species with a
+# dedicated realm is configured by create-realm.sh instead.
 #
-# The portal origin is imported with the realm automatically. Every
-# shared-realm species origin must be registered here once, before users sign
-# in on that site. The script is idempotent.
+# The shared realm must exist first; ensure-shared-realm.sh creates it with the
+# portal or first species origin. Every additional shared-realm origin must be
+# registered here once, before users sign in on that site. The script is
+# idempotent.
 #
 # Requires python3 on the Docker host and a running Keycloak container.
 

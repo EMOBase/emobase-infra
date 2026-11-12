@@ -3,8 +3,7 @@
 #
 # Usage:
 #   ./init.sh
-#   ./init.sh --portal-server https://portal.example.org
-#   ./init.sh --portal-dir ../emobase-portal-deploy --yes
+#   ./init.sh --keycloak-public-url https://auth.example.org/keycloak --yes
 #   ./init.sh --print > .env
 #
 # The script only writes .env. Starting the stack is documented in README.md.
@@ -16,8 +15,6 @@ FORCE=false
 YES=false
 PRINT=false
 LOCAL=false
-PORTAL_SERVER=
-PORTAL_DIR=
 INFRA_NETWORK=
 KEYCLOAK_REALM=
 KEYCLOAK_CLIENT_ID=
@@ -25,9 +22,7 @@ KEYCLOAK_PUBLIC_URL=
 KEYCLOAK_INTERNAL_URL=
 KEYCLOAK_HOST_PORT=
 
-DEFAULT_PORTAL_SERVER="http://localhost:9080"
 DEFAULT_INFRA_NETWORK="emobase-infra"
-DEFAULT_PORTAL_DIR="../emobase-portal-deploy"
 DEFAULT_KEYCLOAK_REALM="ibb"
 DEFAULT_KEYCLOAK_CLIENT_ID="ibb-client"
 DEFAULT_KEYCLOAK_HOST_PORT=8081
@@ -88,12 +83,8 @@ generate_password() {
 }
 
 usage() {
-  echo "Usage: $0 [-f|--force] [-p|--print] [-y|--yes] [--local] [--portal-server URL] [--portal-dir DIR] [--infra-network NAME] [--keycloak-public-url URL] [--keycloak-internal-url URL] [--keycloak-host-port PORT] [--keycloak-realm NAME] [--keycloak-client-id ID]"
+  echo "Usage: $0 [-f|--force] [-p|--print] [-y|--yes] [--local] [--infra-network NAME] [--keycloak-public-url URL] [--keycloak-internal-url URL] [--keycloak-host-port PORT] [--keycloak-realm NAME] [--keycloak-client-id ID]"
   echo "Without options, asks each value in order and shows its default."
-  echo "  --portal-server     Public portal origin, if this server runs one"
-  echo "                      (default: ${DEFAULT_PORTAL_SERVER})"
-  echo "  --portal-dir        Portal checkout whose .env holds PUBLIC_SERVER"
-  echo "                      (default: ${DEFAULT_PORTAL_DIR} when present)"
   echo "  --infra-network     Docker network shared with the deploy stacks (default: ${DEFAULT_INFRA_NETWORK})"
   echo "  --keycloak-public-url"
   echo "                      Browser-facing Keycloak base URL"
@@ -127,14 +118,6 @@ read_env_value() {
 # Parse arguments
 while [[ $# -gt 0 ]]; do
   case $1 in
-    --portal-server)
-      PORTAL_SERVER="$2"
-      shift 2
-      ;;
-    --portal-dir)
-      PORTAL_DIR="$2"
-      shift 2
-      ;;
     --infra-network)
       INFRA_NETWORK="$2"
       shift 2
@@ -194,35 +177,6 @@ if [[ "$PRINT" != true ]]; then
 fi
 
 # Ask for inputs
-if [[ "$LOCAL" == true ]] && [[ -z "$PORTAL_SERVER" ]]; then
-  PORTAL_SERVER="http://localhost:9080"
-  >&2 echo "🏠 Local mode: using ${PORTAL_SERVER}"
-fi
-
-if [[ -z "$PORTAL_SERVER" ]]; then
-  if [[ -z "$PORTAL_DIR" ]] && [[ -f "${DEFAULT_PORTAL_DIR}/.env" ]]; then
-    PORTAL_DIR="$DEFAULT_PORTAL_DIR"
-  fi
-
-  if [[ -n "$PORTAL_DIR" ]]; then
-    PORTAL_SERVER=$(read_env_value "${PORTAL_DIR}/.env" PUBLIC_SERVER || true)
-    [[ -n "$PORTAL_SERVER" ]] \
-      || fatal "Could not read PUBLIC_SERVER from ${PORTAL_DIR}/.env; pass --portal-server URL"
-    >&2 echo "🔗 Using portal URL from ${PORTAL_DIR}/.env"
-  else
-    ask PORTAL_SERVER "🌐 Public URL of the portal, if this server runs one" "$DEFAULT_PORTAL_SERVER"
-  fi
-fi
-PORTAL_SERVER="${PORTAL_SERVER%/}"
-[[ -z "$PORTAL_SERVER" ]] && fatal "PORTAL_SERVER cannot be empty"
-
-if [[ -n "$PORTAL_DIR" ]]; then
-  portal_value=$(read_env_value "${PORTAL_DIR}/.env" PUBLIC_SERVER || true)
-  if [[ -n "$portal_value" ]] && [[ "${portal_value%/}" != "$PORTAL_SERVER" ]]; then
-    >&2 echo "⚠️  PORTAL_SERVER (${PORTAL_SERVER}) does not match ${PORTAL_DIR}/.env PUBLIC_SERVER (${portal_value})."
-  fi
-fi
-
 ask INFRA_NETWORK "🔌 Shared Docker network" "$DEFAULT_INFRA_NETWORK"
 [[ "$INFRA_NETWORK" =~ ^[a-zA-Z0-9_.-]+$ ]] || fatal "EMOBASE_INFRA_NETWORK contains invalid characters"
 
@@ -264,10 +218,6 @@ KEYCLOAK_PUBLIC_URL=${KEYCLOAK_PUBLIC_URL}
 KEYCLOAK_INTERNAL_URL=${KEYCLOAK_INTERNAL_URL}
 KEYCLOAK_HOST_PORT=${KEYCLOAK_HOST_PORT}
 
-# Public origin of the portal, if this server runs one. Used for the initial
-# realm redirect URI; add other origins with scripts/allow-origin.sh.
-PORTAL_PUBLIC_SERVER=${PORTAL_SERVER}
-
 # Name of the Docker network shared with the local portal and species stacks.
 # Keep the same value in the three .env files on this server.
 EMOBASE_INFRA_NETWORK=${INFRA_NETWORK}
@@ -307,7 +257,6 @@ printf '%s\n' "$ENV_CONTENT" > .env
 chmod 600 .env
 
 >&2 echo "✅ .env file generated successfully"
->&2 echo "   Portal URL:     ${PORTAL_SERVER}"
 >&2 echo "   Keycloak URL:   ${KEYCLOAK_PUBLIC_URL}"
 >&2 echo "   Keycloak port:  ${KEYCLOAK_HOST_PORT}"
 >&2 echo "   Infra network:  ${INFRA_NETWORK}"
@@ -316,7 +265,9 @@ chmod 600 .env
 >&2 echo "Next:"
 >&2 echo "  1. Review .env (secrets, network, Keycloak heap)."
 >&2 echo "  2. docker compose up -d --wait"
->&2 echo "  3. Deploy the portal with emobase-portal-deploy/init.sh."
->&2 echo "  4. For each species, create its Directus database and register its URL:"
+>&2 echo "  3. Deploy the portal with emobase-portal-deploy/init.sh, then create"
+>&2 echo "     the shared realm for its origin:"
+>&2 echo "       ./scripts/ensure-shared-realm.sh https://portal.example.org"
+>&2 echo "  4. For each species, create its Directus database and realm origin:"
 >&2 echo "       ./scripts/create-database.sh directus_<species>"
->&2 echo "       ./scripts/allow-origin.sh https://<species>.example.org"
+>&2 echo "       ./scripts/ensure-shared-realm.sh https://<species>.example.org"
