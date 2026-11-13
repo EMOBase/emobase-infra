@@ -49,7 +49,7 @@ generate_password() {
   upper=$(LC_ALL=C tr -dc 'A-Z' </dev/urandom | head -c1 || true)
   lower=$(LC_ALL=C tr -dc 'a-z' </dev/urandom | head -c1 || true)
   digit=$(LC_ALL=C tr -dc '0-9' </dev/urandom | head -c1 || true)
-  symbol=$(LC_ALL=C tr -dc '_-=' </dev/urandom | head -c1 || true)
+  symbol=$(LC_ALL=C tr -dc '_=-' </dev/urandom | head -c1 || true)
   rest=$(LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom | head -c "$((length - 4))" || true)
   printf '%s\n' "$upper$lower$digit$symbol$rest" | \
     awk 'BEGIN{srand()} {for(i=1;i<=length;i++) a[i]=substr($0,i,1)}

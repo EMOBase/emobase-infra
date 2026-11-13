@@ -90,7 +90,7 @@ generate_password() {
   digit=$(LC_ALL=C tr -dc '0-9' </dev/urandom | head -c1 || true)
   # "+" is deliberately excluded: emobase-genomics builds a MySQL DSN from
   # these values, and golang-migrate url.QueryUnescape()s "+" into a space.
-  symbol=$(LC_ALL=C tr -dc '_-=' </dev/urandom | head -c1 || true)
+  symbol=$(LC_ALL=C tr -dc '_=-' </dev/urandom | head -c1 || true)
 
   rest_length=$((length - 4))
   rest=$(LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom | head -c "$rest_length" || true)
