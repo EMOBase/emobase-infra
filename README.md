@@ -52,8 +52,11 @@ The Keycloak admin console is at `${KEYCLOAK_PUBLIC_URL}/admin/`, using
 ## Keycloak realms
 
 Infra owns no realm. Portal and species stacks own their realms and credentials.
-The generic helpers are `scripts/create-realm.sh` and
-`scripts/allow-origin.sh`.
+The generic helpers are `scripts/create-realm.sh`,
+`scripts/delete-realm.sh` and `scripts/allow-origin.sh`.
+
+`delete-realm.sh --yes REALM` is used by `emobase prune` after the owning
+checkout has been removed. It refuses to delete the `master` realm.
 
 See [Realm ownership](https://github.com/EMOBase/emobase-docs/blob/main/REALMS.md)
 for the menu, flags and migration rules.
