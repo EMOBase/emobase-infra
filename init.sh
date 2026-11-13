@@ -239,8 +239,11 @@ KEYCLOAK_INTERNAL_URL="${KEYCLOAK_INTERNAL_URL%/}"
 [[ "$KEYCLOAK_INTERNAL_URL" == */keycloak ]] \
   || fatal "KEYCLOAK_INTERNAL_URL must end with /keycloak"
 
-ask KEYCLOAK_REALM "🏰 Shared Keycloak realm" "$DEFAULT_KEYCLOAK_REALM"
-ask KEYCLOAK_CLIENT_ID "🔑 Shared Keycloak client ID" "$DEFAULT_KEYCLOAK_CLIENT_ID"
+# The realm itself is created later by ensure-shared-realm.sh or the CLI.
+# These defaults are shared values for the portal/species stacks; use the
+# matching flags to override them.
+KEYCLOAK_REALM="${KEYCLOAK_REALM:-$DEFAULT_KEYCLOAK_REALM}"
+KEYCLOAK_CLIENT_ID="${KEYCLOAK_CLIENT_ID:-$DEFAULT_KEYCLOAK_CLIENT_ID}"
 [[ "$KEYCLOAK_REALM" =~ ^[a-zA-Z0-9_.-]+$ ]] || fatal "KEYCLOAK_REALM contains invalid characters"
 [[ "$KEYCLOAK_CLIENT_ID" =~ ^[a-zA-Z0-9_.-]+$ ]] || fatal "KEYCLOAK_CLIENT_ID contains invalid characters"
 

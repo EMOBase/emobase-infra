@@ -46,9 +46,13 @@ species Directus ─────────► mysql:3306
    ```
 
    The script asks in order for the shared Docker network, Keycloak host port,
-   browser-facing and container-facing Keycloak URLs, shared realm and client
-   ID. Every question shows a default; press Enter to accept it. It generates
-   all secrets. It does not need a portal or species URL.
+   and the browser-facing and container-facing Keycloak URLs. Every question
+   shows a default; press Enter to accept it. It generates all secrets. It does
+   not need a portal, species or realm URL.
+
+   The shared realm and client names default to `ibb` and `ibb-client`; pass
+   `--keycloak-realm` or `--keycloak-client-id` to override them. The realm
+   itself is created later by `ensure-shared-realm.sh` or the CLI.
 
    Without `--local`, the Keycloak URL defaults to the detected host IPv4
    address. If this server is behind NAT, enter its public IP or domain instead.
