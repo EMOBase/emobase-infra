@@ -55,6 +55,30 @@ ask() {
   printf -v "$var" '%s' "${value:-$default}"
 }
 
+# detect_host_ip prints the address used for the default route. It is the
+# server's reachable interface address, not necessarily its internet-facing
+# address when the host is behind NAT.
+detect_host_ip() {
+  local ip
+  ip=$(ip -4 route get 1.1.1.1 2>/dev/null | awk '{
+    for (i = 1; i <= NF; i++) if ($i == "src") { print $(i + 1); exit }
+  }')
+  if [[ -z "$ip" ]]; then
+    ip=$(hostname -I 2>/dev/null | awk '{
+      for (i = 1; i <= NF; i++) if ($i !~ /^127\./) { print $i; exit }
+    }')
+  fi
+  if [[ -z "$ip" ]] && command -v ipconfig >/dev/null 2>&1; then
+    ip=$(ipconfig getifaddr en0 2>/dev/null || true)
+  fi
+  printf '%s\n' "$ip"
+}
+
+is_private_ip() {
+  [[ "$1" =~ ^10\. ]] || [[ "$1" =~ ^192\.168\. ]] || \
+    [[ "$1" =~ ^172\.(1[6-9]|2[0-9]|3[01])\. ]]
+}
+
 generate_secret_key() {
   length="${1:-32}"
   local key # Needed to avoid pipefail
@@ -185,6 +209,15 @@ ask KEYCLOAK_HOST_PORT "🔌 Host port for Keycloak" "$DEFAULT_KEYCLOAK_HOST_POR
   || fatal "KEYCLOAK_HOST_PORT must be a number between 1 and 65535"
 
 default_public="http://localhost:${KEYCLOAK_HOST_PORT}/keycloak"
+if [[ "$LOCAL" != true ]]; then
+  host_ip=$(detect_host_ip)
+  if [[ -n "$host_ip" ]]; then
+    default_public="http://${host_ip}:${KEYCLOAK_HOST_PORT}/keycloak"
+    if [[ -z "$KEYCLOAK_PUBLIC_URL" ]] && is_private_ip "$host_ip"; then
+      >&2 echo "⚠️  Detected host address ${host_ip}; use the public IP or domain if this server is behind NAT."
+    fi
+  fi
+fi
 if [[ "$LOCAL" == true ]]; then
   KEYCLOAK_PUBLIC_URL="${KEYCLOAK_PUBLIC_URL:-$default_public}"
 fi

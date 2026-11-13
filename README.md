@@ -50,6 +50,9 @@ species Directus ─────────► mysql:3306
    ID. Every question shows a default; press Enter to accept it. It generates
    all secrets. It does not need a portal or species URL.
 
+   Without `--local`, the Keycloak URL defaults to the detected host IPv4
+   address. If this server is behind NAT, enter its public IP or domain instead.
+
    For a local trial, `./init.sh --local` uses
    `http://localhost:8081/keycloak`. For automation, pass the matching flags
    or `--yes` to accept every default without prompting.
