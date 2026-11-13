@@ -34,60 +34,29 @@ species Directus ─────────► mysql:3306
 
 ## Quick start
 
-1. Generate `.env`:
+```bash
+./init.sh
+docker compose up -d --wait
+```
 
-   ```bash
-   ./init.sh
-   ```
+Then deploy the portal and species stacks. Infra creates no realm or
+application database.
 
-   The script asks for the shared Docker network, Keycloak host port and the
-   browser-facing and container-facing Keycloak URLs. Every question shows a
-   default; press Enter to accept it. It generates the MySQL root and Keycloak
-   admin secrets. It does not ask for or create a realm.
-
-   Without `--local`, URLs default to the detected host IPv4 address. If this
-   server is behind NAT, enter its public IP or domain instead.
-
-2. Start the shared services and wait for their health checks:
-
-   ```bash
-   docker compose up -d --wait
-   ```
-
-3. Deploy the portal and species stacks. Their `init.sh` reads the shared MySQL
-   and Keycloak URLs from this `.env`; see the
-   [deployment guide](https://github.com/EMOBase/emobase-docs/blob/main/DEPLOYMENT.md)
-   for the full order.
+- [Full deployment order](https://github.com/EMOBase/emobase-docs/blob/main/DEPLOYMENT.md)
+- [`init.sh` reference](INIT.md)
+- [Realm ownership](https://github.com/EMOBase/emobase-docs/blob/main/REALMS.md)
 
 The Keycloak admin console is at `${KEYCLOAK_PUBLIC_URL}/admin/`, using
 `KEYCLOAK_ADMIN` and `KEYCLOAK_ADMIN_PASSWORD` from this `.env`.
 
 ## Keycloak realms
 
-Infra deliberately owns no realm. The portal creates the first realm with its
-own values. A species can then join any realm with local credentials or create
-a new independent realm. The realm owner stores the realm/client/seed
-credentials in its own `.env`.
+Infra owns no realm. Portal and species stacks own their realms and credentials.
+The generic helpers are `scripts/create-realm.sh` and
+`scripts/allow-origin.sh`.
 
-The infra scripts are generic helpers used by the owning stack:
-
-```bash
-./scripts/create-realm.sh \
-  --realm emobase-portal \
-  --origin https://portal.example.org \
-  --client-id emobase-portal-client \
-  --client-secret "$KEYCLOAK_CLIENT_SECRET" \
-  --coco-username coco \
-  --coco-password "$COCO_PASSWORD"
-
-./scripts/allow-origin.sh \
-  --realm emobase-portal \
-  --client-id emobase-portal-client \
-  https://tcas.example.org
-```
-
-`create-realm.sh` creates or updates a realm/client and is idempotent.
-`allow-origin.sh` only adds another origin to an existing client.
+See [Realm ownership](https://github.com/EMOBase/emobase-docs/blob/main/REALMS.md)
+for the menu, flags and migration rules.
 
 ## Databases
 
