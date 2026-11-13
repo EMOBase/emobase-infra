@@ -1,17 +1,14 @@
 #!/usr/bin/env bash
-# Allow one or more public origins to sign in through the shared Keycloak realm.
+# Allow one or more public origins to sign in through an existing Keycloak realm.
 #
 # Usage:
-#   ./scripts/allow-origin.sh https://tcas.example.org
-#   ./scripts/allow-origin.sh https://tcas.example.org https://dmel.example.org
+#   ./scripts/allow-origin.sh --realm emobase-portal --client-id emobase-portal-client \
+#     https://tcas.example.org
+#   ./scripts/allow-origin.sh --realm emobase-tcas --client-id emobase-tcas-client \
+#     https://tcas.example.org https://dmel.example.org
 #
-# Use this for species that reuse the portal's shared realm. A species with a
-# dedicated realm is configured by create-realm.sh instead.
-#
-# The shared realm must exist first; ensure-shared-realm.sh creates it with the
-# portal or first species origin. Every additional shared-realm origin must be
-# registered here once, before users sign in on that site. The script is
-# idempotent.
+# The realm/client and their credentials belong to the portal or species that
+# created them. This helper only adds origins to an existing client.
 #
 # Requires python3 on the Docker host and a running Keycloak container.
 
@@ -29,17 +26,56 @@ if ! command -v python3 >/dev/null 2>&1; then
   exit 1
 fi
 
-if [[ $# -eq 0 ]]; then
-  echo "Usage: $0 ORIGIN [ORIGIN...]" >&2
-  exit 1
-fi
-
 read_env_value() {
   local file="$1" key="$2" value
   value=$(grep -E "^${key}=" "$file" | tail -n1 | cut -d= -f2- | tr -d '\r')
   value=${value#\"}; value=${value%\"}
   value=${value#\'}; value=${value%\'}
   printf '%s\n' "$value"
+}
+
+usage() {
+  echo "Usage: $0 --realm REALM --client-id ID ORIGIN [ORIGIN...]" >&2
+}
+
+REALM=
+CLIENT_ID=
+ORIGINS=()
+while [[ $# -gt 0 ]]; do
+  case $1 in
+    --realm)
+      REALM="$2"
+      shift 2
+      ;;
+    --client-id)
+      CLIENT_ID="$2"
+      shift 2
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    -*)
+      usage
+      exit 1
+      ;;
+    *)
+      ORIGINS+=("$1")
+      shift
+      ;;
+  esac
+done
+
+[[ -n "$REALM" ]] || { usage; exit 1; }
+[[ -n "$CLIENT_ID" ]] || { usage; exit 1; }
+[[ ${#ORIGINS[@]} -gt 0 ]] || { usage; exit 1; }
+[[ "$REALM" =~ ^[a-zA-Z0-9_.-]+$ ]] || {
+  echo "❌ Invalid realm name '$REALM'." >&2
+  exit 1
+}
+[[ "$CLIENT_ID" =~ ^[a-zA-Z0-9_.-]+$ ]] || {
+  echo "❌ Invalid client ID '$CLIENT_ID'." >&2
+  exit 1
 }
 
 KEYCLOAK_ADMIN=$(read_env_value .env KEYCLOAK_ADMIN || true)
@@ -49,18 +85,13 @@ KEYCLOAK_ADMIN_PASSWORD=$(read_env_value .env KEYCLOAK_ADMIN_PASSWORD || true)
   echo "❌ .env has no KEYCLOAK_ADMIN_PASSWORD; re-run ./init.sh." >&2
   exit 1
 }
-KEYCLOAK_REALM=$(read_env_value .env KEYCLOAK_REALM || true)
-KEYCLOAK_REALM="${KEYCLOAK_REALM:-ibb}"
-KEYCLOAK_CLIENT_ID=$(read_env_value .env KEYCLOAK_CLIENT_ID || true)
-KEYCLOAK_CLIENT_ID="${KEYCLOAK_CLIENT_ID:-ibb-client}"
 
 kcadm() {
   docker compose exec -T keycloak /opt/keycloak/bin/kcadm.sh "$@"
 }
 
-# Fail early with a clear message when the stack is not running.
 if ! docker compose ps --status running --services 2>/dev/null | grep -qx keycloak; then
-  echo "❌ The shared Keycloak container is not running. Start it with:" >&2
+  echo "❌ The Keycloak container is not running. Start it with:" >&2
   echo "   docker compose up -d --wait" >&2
   exit 1
 fi
@@ -71,14 +102,14 @@ kcadm config credentials \
   --user "$KEYCLOAK_ADMIN" \
   --password "$KEYCLOAK_ADMIN_PASSWORD" >/dev/null
 
-client_id=$(kcadm get clients -r "$KEYCLOAK_REALM" -q clientId="$KEYCLOAK_CLIENT_ID" --fields id --format csv --noquotes \
+client_id=$(kcadm get clients -r "$REALM" -q clientId="$CLIENT_ID" --fields id --format csv --noquotes \
   | tail -n1 | tr -d '\r')
 if [[ -z "$client_id" ]]; then
-  echo "❌ Client '${KEYCLOAK_CLIENT_ID}' was not found in realm '${KEYCLOAK_REALM}'." >&2
+  echo "❌ Client '${CLIENT_ID}' was not found in realm '${REALM}'." >&2
   exit 1
 fi
 
-current=$(kcadm get "clients/$client_id" -r "$KEYCLOAK_REALM" --fields redirectUris,webOrigins --format json)
+current=$(kcadm get "clients/$client_id" -r "$REALM" --fields redirectUris,webOrigins --format json)
 
 {
   read -r redirects
@@ -100,13 +131,13 @@ for origin in sys.argv[1:]:
 
 print(json.dumps(redirects))
 print(json.dumps(origins))
-' "$@")
+' "${ORIGINS[@]}")
 
-kcadm update "clients/$client_id" -r "$KEYCLOAK_REALM" \
+kcadm update "clients/$client_id" -r "$REALM" \
   -s "redirectUris=$redirects" \
   -s "webOrigins=$origins"
 
-echo "✅ Realm '${KEYCLOAK_REALM}' now accepts sign-in redirects from:"
-for origin in "$@"; do
+echo "✅ Realm '${REALM}' now accepts sign-in redirects from:"
+for origin in "${ORIGINS[@]}"; do
   echo "   - ${origin%/}"
 done

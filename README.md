@@ -1,20 +1,21 @@
 # EMOBase infrastructure (one per server)
 
-Shared services for an EMOBase deployment server:
+Runtime services for an EMOBase deployment server:
 
 | Service | Purpose |
 | --- | --- |
-| `mysql` | One MySQL 8.0 instance for the portal, Keycloak and every species' Directus |
-| `keycloak` | One Keycloak 24 instance; the shared realm is created on demand, plus optional dedicated species realms |
+| `mysql` | One MySQL 8.0 instance for Keycloak, the portal and every species' Directus |
+| `keycloak` | One Keycloak 24 instance; realms are owned by the portal and species stacks |
 
 Each server that hosts EMOBase runs its own `emobase-infra`. It provides one
 MySQL and one Keycloak for every portal/species stack on **that server**. The
-portal and species Directus join the shared Docker network and reach MySQL as
+portal and species stacks join the shared Docker network and reach MySQL as
 `mysql:3306`; services on the network reach Keycloak as `keycloak:8080`.
 Keycloak is also reachable at `KEYCLOAK_PUBLIC_URL`.
 
-Each server runs one MySQL and one Keycloak for all of its stacks. Elasticsearch
-runs per stack.
+Infra owns no application data. Keycloak starts with only its `master` realm;
+the portal and species stacks create and own the realms, clients, users and
+databases they need.
 
 ```
 Browser ──► portal :9080        Browser ──► Keycloak :8081
@@ -22,19 +23,13 @@ Browser ──► portal :9080        Browser ──► Keycloak :8081
               │
 portal/species services ──► keycloak:8080 (shared network or public URL)
 species Directus ─────────► mysql:3306
-
-┌─────────────────────────────────────────────────────────┐
-│ emobase-infra (one per server)                          │
-│  keycloak :8081 ──► public auth endpoint                │
-│  mysql :3306                                            │
-└─────────────────────────────────────────────────────────┘
 ```
 
 ## Prerequisites
 
 - Docker Engine 24+ with Compose v2
-- `python3` for the Keycloak helper scripts (`ensure-shared-realm.sh`,
-  `allow-origin.sh`, `create-realm.sh`)
+- `python3` for the Keycloak helper scripts (`create-realm.sh`,
+  `allow-origin.sh`, `create-database.sh`)
 - The Keycloak public URL decided before the first start
 
 ## Quick start
@@ -45,23 +40,13 @@ species Directus ─────────► mysql:3306
    ./init.sh
    ```
 
-   The script asks in order for the shared Docker network, Keycloak host port,
-   and the browser-facing and container-facing Keycloak URLs. Every question
-   shows a default; press Enter to accept it. It generates all secrets. It does
-   not need a portal, species or realm URL.
+   The script asks for the shared Docker network, Keycloak host port and the
+   browser-facing and container-facing Keycloak URLs. Every question shows a
+   default; press Enter to accept it. It generates the MySQL root and Keycloak
+   admin secrets. It does not ask for or create a realm.
 
-   The shared realm and client names default to `ibb` and `ibb-client`; pass
-   `--keycloak-realm` or `--keycloak-client-id` to override them. `init.sh` does
-   not create the realm. It writes those names and credentials; the realm is
-   created by `ensure-shared-realm.sh` when the portal or first shared-realm
-   species is set up. Override the names before that step.
-
-   Without `--local`, the Keycloak URL defaults to the detected host IPv4
-   address. If this server is behind NAT, enter its public IP or domain instead.
-
-   For a local trial, `./init.sh --local` uses
-   `http://localhost:8081/keycloak`. For automation, pass the matching flags
-   or `--yes` to accept every default without prompting.
+   Without `--local`, URLs default to the detected host IPv4 address. If this
+   server is behind NAT, enter its public IP or domain instead.
 
 2. Start the shared services and wait for their health checks:
 
@@ -69,80 +54,57 @@ species Directus ─────────► mysql:3306
    docker compose up -d --wait
    ```
 
-3. Create the shared realm when you first deploy a portal or a species that
-   reuses it:
-
-   ```bash
-   ./scripts/ensure-shared-realm.sh https://portal.example.org
-   ```
-
-   On a species-only server, use the first species URL. Additional shared-realm
-   origins are added with `scripts/allow-origin.sh`. The `emobase` CLI does this
-   automatically during `create`/`bootstrap` when infra is running.
-
-4. Deploy the portal and species stacks. Their `init.sh` reads the shared
-   values from this `.env`; see the
+3. Deploy the portal and species stacks. Their `init.sh` reads the shared MySQL
+   and Keycloak URLs from this `.env`; see the
    [deployment guide](https://github.com/EMOBase/emobase-docs/blob/main/DEPLOYMENT.md)
    for the full order.
 
-Keycloak starts with only its master realm. The shared realm is created on
-demand by `ensure-shared-realm.sh` or the `emobase` CLI.
-
 The Keycloak admin console is at `${KEYCLOAK_PUBLIC_URL}/admin/`, using
-`KEYCLOAK_ADMIN` and `KEYCLOAK_ADMIN_PASSWORD` from this `.env`. The seeded
-realm user (`COCO_USERNAME` / `COCO_PASSWORD`) can sign in to every portal and
-species site on this server; its password is temporary and must be changed on
-first login.
+`KEYCLOAK_ADMIN` and `KEYCLOAK_ADMIN_PASSWORD` from this `.env`.
 
-## Keycloak realm strategy
+## Keycloak realms
 
-The portal always uses the shared realm from this `.env` (`KEYCLOAK_REALM`,
-default `ibb`) and its client (`KEYCLOAK_CLIENT_ID`, default `ibb-client`).
-Each species can choose one of two models during `emobase-deploy/init.sh`:
+Infra deliberately owns no realm. The portal creates the first realm with its
+own values. A species can then join any realm with local credentials or create
+a new independent realm. The realm owner stores the realm/client/seed
+credentials in its own `.env`.
 
-- **Shared realm** — reuse the portal's realm. One team manages users for the
-  portal and every species. Create it with the first origin, then add each
-  additional species origin:
-
-  ```bash
-  ./scripts/ensure-shared-realm.sh https://tcas.example.org
-  ./scripts/allow-origin.sh https://dmel.example.org
-  ```
-
-- **Dedicated realm** — create a separate realm with its own client and seed
-  `coco` user. Use this when different people manage each website. The species
-  `init.sh` creates it automatically, or you can do it manually:
-
-  ```bash
-  ./scripts/create-realm.sh --realm ibb_tcas --origin https://tcas.example.org
-  ```
-
-  A dedicated realm has its own users and administrators. The portal realm is
-  unaffected.
-
-## Species database and realm
-
-During species deployment, this stack provides:
+The infra scripts are generic helpers used by the owning stack:
 
 ```bash
-./scripts/create-database.sh directus_tcas
-./scripts/ensure-shared-realm.sh https://tcas.example.org   # first shared-realm site
-./scripts/allow-origin.sh https://tcas.example.org          # additional shared-realm site
-./scripts/create-realm.sh --realm ibb_tcas --origin https://tcas.example.org  # dedicated realm
+./scripts/create-realm.sh \
+  --realm emobase-portal \
+  --origin https://portal.example.org \
+  --client-id emobase-portal-client \
+  --client-secret "$KEYCLOAK_CLIENT_SECRET" \
+  --coco-username coco \
+  --coco-password "$COCO_PASSWORD"
+
+./scripts/allow-origin.sh \
+  --realm emobase-portal \
+  --client-id emobase-portal-client \
+  https://tcas.example.org
 ```
 
-Use the same database name as `DIRECTUS_DB_DATABASE` in the species `.env`.
-The [deployment guide](https://github.com/EMOBase/emobase-docs/blob/main/DEPLOYMENT.md)
-covers the full species setup order.
+`create-realm.sh` creates or updates a realm/client and is idempotent.
+`allow-origin.sh` only adds another origin to an existing client.
 
-To remove a species database after retiring a site:
+## Databases
+
+Infra creates only the `keycloak` database. The portal and species create their
+own databases:
+
+```bash
+./scripts/create-database.sh emobase_genomics
+./scripts/create-database.sh directus_tcas
+```
+
+Use the matching database names from the portal/species `.env` files. To remove
+a species database after retiring a site:
 
 ```bash
 ./scripts/drop-database.sh directus_tcas
 ```
-
-Delete a dedicated realm in the Keycloak admin console when it is no longer
-needed.
 
 ## Environment values shared with the deploy stacks
 
@@ -154,21 +116,15 @@ The deploy stacks' `init.sh` reads these from this `.env`:
 | `KEYCLOAK_PUBLIC_URL` | Browser-facing Keycloak issuer for the portal and species |
 | `KEYCLOAK_INTERNAL_URL` | Container-facing Keycloak URL on the shared network |
 | `KEYCLOAK_HOST_PORT` | Host port where Keycloak is published |
-| `KEYCLOAK_REALM` | Portal and shared-realm species |
-| `KEYCLOAK_CLIENT_ID` | Portal and shared-realm species |
-| `KEYCLOAK_CLIENT_SECRET` | Portal and shared-realm species |
-| `COCO_USERNAME` / `COCO_PASSWORD` | Shared-realm seed user |
 | `EMOBASE_INFRA_NETWORK` | External Docker network name |
 
-The shared realm and its redirect origins are not part of `.env`. They are
-created by `scripts/ensure-shared-realm.sh` or the `emobase` CLI.
+Realm names, client credentials and seed users are not part of infra `.env`.
 
 ## Local trial
 
 ```bash
 ./init.sh --local
 docker compose up -d --wait
-./scripts/ensure-shared-realm.sh http://localhost:9080
 ```
 
 This starts Keycloak at `http://localhost:8081/keycloak`. For the full local
@@ -177,8 +133,8 @@ walkthrough including the portal and species stacks, see the
 
 ## Backups
 
-The MySQL data volume contains the portal genomics data, the Keycloak realm and
-every species' Directus data. Back up the whole instance:
+The MySQL data volume contains the portal genomics data, Keycloak realms/users
+and every species' Directus data. Back up the whole instance:
 
 ```bash
 docker compose exec -T mysql \
@@ -187,9 +143,6 @@ docker compose exec -T mysql \
 ```
 
 Also keep this repository's `.env` (secrets) and the `mysql-data` volume.
-
-Keycloak configuration (realms, clients and users) lives in MySQL. The shared
-realm is created on demand; later changes belong in the admin console.
 
 ## Updating
 
@@ -204,7 +157,7 @@ explicitly to upgrade. Back up MySQL before a major-version upgrade.
 
 ## Reset
 
-This destroys this server's databases and all local Keycloak users:
+This destroys this server's databases and all local Keycloak realms/users:
 
 ```bash
 docker compose down -v
@@ -220,6 +173,5 @@ Only do this when the data can be lost.
   servers; a species on another server uses that server's own infra.
 - Keycloak is published on `KEYCLOAK_HOST_PORT` and has its own public URL
   (`KEYCLOAK_PUBLIC_URL`). Put a TLS reverse proxy in front in production.
-- Keycloak starts with only the master realm. The shared realm is created by
-  `scripts/ensure-shared-realm.sh` when the portal or first shared-realm species
-  is deployed.
+- Keycloak starts with only the `master` realm. The portal/species stacks create
+  and own application realms.

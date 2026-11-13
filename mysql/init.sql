@@ -1,7 +1,5 @@
 -- Created only on the first start of the MySQL data volume.
 --
--- Portal and Keycloak databases. Per-species Directus databases are created
--- later with scripts/create-database.sh (one database per species deployment).
-CREATE DATABASE IF NOT EXISTS emobase_genomics;
+-- Keycloak needs its own database. Portal and species databases are created
+-- by their own setup steps with scripts/create-database.sh.
 CREATE DATABASE IF NOT EXISTS keycloak;
-CREATE DATABASE IF NOT EXISTS directus;

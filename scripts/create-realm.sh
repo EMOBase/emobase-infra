@@ -2,13 +2,12 @@
 # Create (or update) a Keycloak realm with one browser origin.
 #
 # Usage:
-#   ./scripts/create-realm.sh --realm ibb_tcas --origin https://tcas.example.org
-#   ./scripts/create-realm.sh --realm ibb --origin https://portal.example.org \
-#     --client-id ibb-client --client-secret ... --coco-password ...
+#   ./scripts/create-realm.sh --realm emobase-tcas --origin https://tcas.example.org
+#   ./scripts/create-realm.sh --realm emobase-portal --origin https://portal.example.org \
+#     --client-id emobase-portal-client --client-secret ... --coco-password ...
 #
-# A dedicated realm gives one species its own users and administrators.
-# scripts/ensure-shared-realm.sh uses this script for the shared portal realm.
-# Use scripts/allow-origin.sh to add another shared-realm origin.
+# Realms are owned by the portal or species that creates them. Use
+# scripts/allow-origin.sh to add another origin to an existing realm.
 #
 # The script is safe to re-run: it updates the client secret, adds the origin
 # if missing, and resets the seed user's temporary password unless
@@ -64,7 +63,7 @@ usage() {
 
 REALM=
 ORIGIN=
-CLIENT_ID=ibb-client
+CLIENT_ID=emobase-client
 CLIENT_SECRET=
 COCO_USERNAME=coco
 COCO_PASSWORD=
