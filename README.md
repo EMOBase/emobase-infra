@@ -51,8 +51,10 @@ species Directus ─────────► mysql:3306
    not need a portal, species or realm URL.
 
    The shared realm and client names default to `ibb` and `ibb-client`; pass
-   `--keycloak-realm` or `--keycloak-client-id` to override them. The realm
-   itself is created later by `ensure-shared-realm.sh` or the CLI.
+   `--keycloak-realm` or `--keycloak-client-id` to override them. `init.sh` does
+   not create the realm. It writes those names and credentials; the realm is
+   created by `ensure-shared-realm.sh` when the portal or first shared-realm
+   species is set up. Override the names before that step.
 
    Without `--local`, the Keycloak URL defaults to the detected host IPv4
    address. If this server is behind NAT, enter its public IP or domain instead.
