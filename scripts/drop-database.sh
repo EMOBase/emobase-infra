@@ -47,6 +47,10 @@ fi
 }
 
 if [[ "$assume_yes" != true ]]; then
+  if [[ ! -t 0 ]]; then
+    echo "❌ Refusing to drop '$db' without --yes (stdin is not a terminal)." >&2
+    exit 1
+  fi
   read -rp "Drop database '$db'? This cannot be undone. [y/N] " answer
   [[ "$answer" == "y" || "$answer" == "Y" ]] || {
     echo "Cancelled."
