@@ -18,9 +18,13 @@ Every question shows a default. Press Enter to accept it.
 | Shared Docker network | `emobase-infra` |
 | Keycloak host port | `8081` |
 | Browser-facing Keycloak URL | detected host IPv4, or localhost with `--local` |
-| Container-facing Keycloak URL | `http://keycloak:8080/keycloak` |
 
 The browser-facing URL must end with `/keycloak`.
+
+`KEYCLOAK_INTERNAL_URL` is not asked for: it is always
+`http://keycloak:8080/keycloak`, because infra's own Compose service is
+`keycloak` on the shared network. Pass `--keycloak-internal-url` only to
+override it for an unusual setup.
 
 Without `--local`, the default browser URL uses the machine's primary IPv4
 address. This is the address used for the default route, not necessarily a
@@ -52,7 +56,7 @@ client, `coco` user or application database is created here.
 | --- | --- |
 | `--local` | Use localhost for the Keycloak URL |
 | `--keycloak-public-url URL` | Browser-facing Keycloak base URL |
-| `--keycloak-internal-url URL` | Keycloak URL used by containers |
+| `--keycloak-internal-url URL` | Override the fixed container-facing Keycloak URL (default `http://keycloak:8080/keycloak`) |
 | `--keycloak-host-port PORT` | Host port for Keycloak |
 | `--infra-network NAME` | Shared Docker network |
 | `-y`, `--yes` | Accept defaults without prompting |

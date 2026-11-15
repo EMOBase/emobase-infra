@@ -86,7 +86,7 @@ The deploy stacks' `init.sh` reads these from this `.env`:
 | --- | --- |
 | `MYSQL_ROOT_PASSWORD` | Portal genomics API/workers and species Directus |
 | `KEYCLOAK_PUBLIC_URL` | Browser-facing Keycloak issuer for the portal and species |
-| `KEYCLOAK_INTERNAL_URL` | Container-facing Keycloak URL on the shared network |
+| `KEYCLOAK_INTERNAL_URL` | Container-facing Keycloak URL; fixed to `http://keycloak:8080/keycloak` on the shared network |
 | `KEYCLOAK_HOST_PORT` | Host port where Keycloak is published |
 | `EMOBASE_INFRA_NETWORK` | External Docker network name |
 

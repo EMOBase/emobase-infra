@@ -110,7 +110,7 @@ usage() {
   echo "                      Browser-facing Keycloak base URL"
   echo "                      (default: http://localhost:<keycloak-host-port>/keycloak)"
   echo "  --keycloak-internal-url"
-  echo "                      Container-facing Keycloak base URL on the shared network"
+  echo "                      Override the container-facing Keycloak URL"
   echo "                      (default: ${DEFAULT_KEYCLOAK_INTERNAL_URL})"
   echo "  --keycloak-host-port"
   echo "                      Host port for Keycloak (default: ${DEFAULT_KEYCLOAK_HOST_PORT})"
@@ -216,7 +216,10 @@ KEYCLOAK_PUBLIC_URL="${KEYCLOAK_PUBLIC_URL%/}"
 [[ "$KEYCLOAK_PUBLIC_URL" == */keycloak ]] \
   || fatal "KEYCLOAK_PUBLIC_URL must end with /keycloak"
 
-ask KEYCLOAK_INTERNAL_URL "🔗 Container-facing Keycloak URL" "$DEFAULT_KEYCLOAK_INTERNAL_URL"
+# The container-facing URL is fixed: infra's Keycloak is the `keycloak` Compose
+# service on the shared network. Do not ask for it; the flag remains as an
+# override for unusual setups.
+KEYCLOAK_INTERNAL_URL="${KEYCLOAK_INTERNAL_URL:-$DEFAULT_KEYCLOAK_INTERNAL_URL}"
 KEYCLOAK_INTERNAL_URL="${KEYCLOAK_INTERNAL_URL%/}"
 [[ "$KEYCLOAK_INTERNAL_URL" =~ ^https?://[^/]+ ]] \
   || fatal "KEYCLOAK_INTERNAL_URL must start with http:// or https://"
