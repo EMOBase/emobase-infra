@@ -149,8 +149,9 @@ docker compose exec -T mysql \
   > emobase-mysql-$(date +%F).sql
 ```
 
-The Elasticsearch snapshot repository is `./es_bk`. Register it once, then take
-a snapshot of all indices:
+The Elasticsearch snapshot repository is `./es_bk`. The container runs as UID
+1000, so make the bind mount writable first (`sudo chown -R 1000:1000 es_bk`).
+Register the repository once, then take a snapshot of all indices:
 
 ```bash
 curl -X PUT "http://127.0.0.1:${ELASTICSEARCH_HOST_PORT:-9202}/_snapshot/emobase" \
