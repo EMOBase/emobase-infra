@@ -1,7 +1,8 @@
 # `init.sh` reference
 
-`init.sh` generates `emobase-infra/.env`. It configures the MySQL/Keycloak
-runtime only. It does not create a Keycloak realm or an application database.
+`init.sh` generates `emobase-infra/.env`. It configures the
+MySQL/Keycloak/Elasticsearch runtime only. It does not create a Keycloak realm,
+an application database or any Elasticsearch index.
 
 ## Quick run
 
@@ -17,6 +18,7 @@ Every question shows a default. Press Enter to accept it.
 | --- | --- |
 | Shared Docker network | `emobase-infra` |
 | Keycloak host port | `8081` |
+| Elasticsearch host port | `9202` |
 | Browser-facing Keycloak URL | detected host IPv4, or localhost with `--local` |
 
 The browser-facing URL must end with `/keycloak`.
@@ -40,15 +42,23 @@ The script writes:
 KEYCLOAK_PUBLIC_URL=...
 KEYCLOAK_INTERNAL_URL=...
 KEYCLOAK_HOST_PORT=...
+ELASTICSEARCH_HOST_PORT=...
 EMOBASE_INFRA_NETWORK=...
 MYSQL_ROOT_PASSWORD=...
 KEYCLOAK_ADMIN=admin
 KEYCLOAK_ADMIN_PASSWORD=...
 KEYCLOAK_JAVA_OPTS="-Xms256m -Xmx768m"
+ELASTICSEARCH_JAVA_OPTS="-Xms512m -Xmx512m"
+ELASTICSEARCH_MEM_LIMIT=1g
 ```
 
 `MYSQL_ROOT_PASSWORD` and `KEYCLOAK_ADMIN_PASSWORD` are generated. No realm,
-client, `coco` user or application database is created here.
+client, `coco` user, application database or index is created here.
+
+`ELASTICSEARCH_HOST_PORT` is bound to `127.0.0.1` only, for administration and
+backup. Applications always use `elasticsearch:9200` on the shared network.
+Raise `ELASTICSEARCH_JAVA_OPTS` and `ELASTICSEARCH_MEM_LIMIT` together when the
+server has enough RAM; keep the limit above the heap size.
 
 ## Flags
 
@@ -58,6 +68,7 @@ client, `coco` user or application database is created here.
 | `--keycloak-public-url URL` | Browser-facing Keycloak base URL |
 | `--keycloak-internal-url URL` | Override the fixed container-facing Keycloak URL (default `http://keycloak:8080/keycloak`) |
 | `--keycloak-host-port PORT` | Host port for Keycloak |
+| `--elasticsearch-host-port PORT` | Loopback-only host port for Elasticsearch |
 | `--infra-network NAME` | Shared Docker network |
 | `-y`, `--yes` | Accept defaults without prompting |
 | `-f`, `--force` | Overwrite an existing `.env` |
@@ -99,8 +110,9 @@ Unattended:
    ```
 
 2. Deploy the portal. It owns its Keycloak realm and creates the first
-   application database.
-3. Deploy species stacks. They join an existing realm or create their own.
+   application database. It writes indices under the `genomics` prefix.
+3. Deploy species stacks. They join an existing realm or create their own, and
+   write indices under their own `EMOBASE_ES_INDEX_PREFIX`.
 
 See [DEPLOYMENT.md](https://github.com/EMOBase/emobase-docs/blob/main/DEPLOYMENT.md)
 for the full order and

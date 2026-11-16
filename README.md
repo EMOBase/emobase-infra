@@ -6,16 +6,18 @@ Runtime services for an EMOBase deployment server:
 | --- | --- |
 | `mysql` | One MySQL 8.0 instance for Keycloak, the portal and every species' Directus |
 | `keycloak` | One Keycloak 24 instance; realms are owned by the portal and species stacks |
+| `elasticsearch` | One Elasticsearch 8.17 instance for the portal and every species' search indices |
 
 Each server that hosts EMOBase runs its own `emobase-infra`. It provides one
-MySQL and one Keycloak for every portal/species stack on **that server**. The
-portal and species stacks join the shared Docker network and reach MySQL as
-`mysql:3306`; services on the network reach Keycloak as `keycloak:8080`.
-Keycloak is also reachable at `KEYCLOAK_PUBLIC_URL`.
+MySQL, Keycloak and Elasticsearch for every portal/species stack on **that
+server**. The portal and species stacks join the shared Docker network and
+reach MySQL as `mysql:3306`, Keycloak as `keycloak:8080` and Elasticsearch as
+`elasticsearch:9200`. Keycloak is also reachable at `KEYCLOAK_PUBLIC_URL`.
 
-Infra owns no application data. Keycloak starts with only its `master` realm;
-the portal and species stacks create and own the realms, clients, users and
-databases they need.
+Infra owns no realm or application database. Keycloak starts with only its
+`master` realm; the portal and species stacks create and own the realms,
+clients, users and databases they need. Elasticsearch is shared: each stack
+writes only indices under its own prefix.
 
 ```
 Browser ──► portal :9080        Browser ──► Keycloak :8081
@@ -23,7 +25,15 @@ Browser ──► portal :9080        Browser ──► Keycloak :8081
               │
 portal/species services ──► keycloak:8080 (shared network or public URL)
 species Directus ─────────► mysql:3306
+portal/species services ──► elasticsearch:9200 (shared network)
+species es-proxy ─────────► elasticsearch:9200 (local alias es)
 ```
+
+Elasticsearch is not published on the LAN. Its host port is bound to
+`127.0.0.1` for administration and backup only. Species application services
+reach it through a local `es-proxy` sidecar, so they are not attached to the
+shared network. The proxy isolates networks; it does not restrict which indices
+a species container can query.
 
 ## Prerequisites
 
@@ -48,6 +58,9 @@ application database.
 
 The Keycloak admin console is at `${KEYCLOAK_PUBLIC_URL}/admin/`, using
 `KEYCLOAK_ADMIN` and `KEYCLOAK_ADMIN_PASSWORD` from this `.env`.
+
+Elasticsearch is at `http://127.0.0.1:${ELASTICSEARCH_HOST_PORT:-9202}` on the
+Docker host (loopback only).
 
 ## Keycloak realms
 
@@ -78,6 +91,27 @@ a species database after retiring a site:
 ./scripts/drop-database.sh directus_tcas
 ```
 
+## Elasticsearch
+
+The portal writes `genomics-*` indices
+(`EMOBASE_GENOMICS_ELASTICSEARCH__INDEX_PREFIX`). Each species stack writes
+`<prefix>-*` indices; `emobase-deploy/init.sh` sets its
+`EMOBASE_ES_INDEX_PREFIX`, and the deploy Compose file maps it to each
+service's index-prefix property.
+
+To delete one species' indices after retiring a site:
+
+```bash
+./scripts/delete-es-indices.sh --yes tcas
+```
+
+The helper deletes only `<prefix>-*`; other species and the portal are
+untouched. `emobase species remove --purge` and `emobase prune` call it
+automatically after the stack is gone.
+
+Do not change a prefix after the first start unless you also migrate or delete
+the old indices: the services would create a second, empty set.
+
 ## Environment values shared with the deploy stacks
 
 The deploy stacks' `init.sh` reads these from this `.env`:
@@ -88,6 +122,7 @@ The deploy stacks' `init.sh` reads these from this `.env`:
 | `KEYCLOAK_PUBLIC_URL` | Browser-facing Keycloak issuer for the portal and species |
 | `KEYCLOAK_INTERNAL_URL` | Container-facing Keycloak URL; fixed to `http://keycloak:8080/keycloak` on the shared network |
 | `KEYCLOAK_HOST_PORT` | Host port where Keycloak is published |
+| `ELASTICSEARCH_HOST_PORT` | Loopback-only host port for Elasticsearch administration |
 | `EMOBASE_INFRA_NETWORK` | External Docker network name |
 
 Realm names, client credentials and seed users are not part of infra `.env`.
@@ -114,7 +149,21 @@ docker compose exec -T mysql \
   > emobase-mysql-$(date +%F).sql
 ```
 
-Also keep this repository's `.env` (secrets) and the `mysql-data` volume.
+The Elasticsearch snapshot repository is `./es_bk`. Register it once, then take
+a snapshot of all indices:
+
+```bash
+curl -X PUT "http://127.0.0.1:${ELASTICSEARCH_HOST_PORT:-9202}/_snapshot/emobase" \
+  -H "Content-Type: application/json" \
+  -d '{"type":"fs","settings":{"location":"/es-bk","compress":true}}'
+
+curl -X PUT "http://127.0.0.1:${ELASTICSEARCH_HOST_PORT:-9202}/_snapshot/emobase/full_$(date +%F)?wait_for_completion=true" \
+  -H "Content-Type: application/json" \
+  -d '{"indices":"*","include_global_state":true}'
+```
+
+Keep this repository's `.env` (secrets), the `mysql-data` and `es-data` volumes,
+and the contents of `es_bk`.
 
 ## Updating
 
@@ -124,12 +173,14 @@ docker compose pull
 docker compose up -d --wait
 ```
 
-MySQL and Keycloak images are pinned by tag in `compose.yml`. Change the tag
-explicitly to upgrade. Back up MySQL before a major-version upgrade.
+MySQL, Keycloak and Elasticsearch images are pinned by tag in `compose.yml`.
+Change the tag explicitly to upgrade. Back up MySQL and Elasticsearch before a
+major-version upgrade.
 
 ## Reset
 
-This destroys this server's databases and all local Keycloak realms/users:
+This destroys this server's databases, all local Keycloak realms/users and all
+Elasticsearch indices:
 
 ```bash
 docker compose down -v
@@ -139,11 +190,16 @@ Only do this when the data can be lost.
 
 ## Notes
 
-- The MySQL port is not published on the host. Attach administration or backup
-  containers to the `emobase-infra` network, or use `docker compose exec`.
-- Run one `emobase-infra` per server. MySQL and Keycloak are not shared between
-  servers; a species on another server uses that server's own infra.
+- The MySQL and Elasticsearch ports are not published on the LAN. MySQL has no
+  host port; Elasticsearch binds `127.0.0.1:${ELASTICSEARCH_HOST_PORT}` for
+  administration. Attach administration or backup containers to the
+  `emobase-infra` network, or use `docker compose exec`.
+- Run one `emobase-infra` per server. MySQL, Keycloak and Elasticsearch are not
+  shared between servers; a species on another server uses that server's own
+  infra.
 - Keycloak is published on `KEYCLOAK_HOST_PORT` and has its own public URL
   (`KEYCLOAK_PUBLIC_URL`). Put a TLS reverse proxy in front in production.
 - Keycloak starts with only the `master` realm. The portal/species stacks create
   and own application realms.
+- All stacks share one Elasticsearch. Index prefixes keep their data separate;
+  they are not an authorization boundary.

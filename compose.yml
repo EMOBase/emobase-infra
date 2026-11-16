@@ -6,11 +6,20 @@ name: emobase-infra
 # It runs the services that every local portal/species deployment uses:
 #   * MySQL           - databases for the portal, Keycloak and Directus
 #   * Keycloak        - the shared portal realm plus optional species realms
+#   * Elasticsearch   - one index store for the portal and every species
 #
 # The deploy stacks (emobase-portal-deploy and emobase-deploy) join the
-# external network below and reach MySQL/Keycloak by their service names.
-# Keycloak also has its own browser-facing endpoint at KEYCLOAK_PUBLIC_URL, so
-# species authentication does not depend on the portal.
+# external network below and reach MySQL/Keycloak/Elasticsearch by their
+# service names. Keycloak also has its own browser-facing endpoint at
+# KEYCLOAK_PUBLIC_URL, so species authentication does not depend on the portal.
+#
+# Elasticsearch is never published on the LAN. It listens on the shared Docker
+# network as `elasticsearch:9200`; the loopback-only host port below is for
+# administration and backup. Species stacks reach it through their own
+# `es-proxy` sidecar so the application services stay off this network.
+# The proxy is network isolation, not authorization: anything on a species
+# network can reach every index in this shared instance. Index prefixes keep
+# species data apart, not secret from each other.
 
 services:
   mysql:
@@ -77,8 +86,44 @@ services:
         aliases:
           - keycloak
 
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.17.4
+    container_name: emobase-infra-elasticsearch
+    restart: unless-stopped
+    environment:
+      discovery.type: single-node
+      xpack.security.enabled: "false"
+      ES_JAVA_OPTS: ${ELASTICSEARCH_JAVA_OPTS:--Xms512m -Xmx512m}
+      # Snapshot repository inside the container. The bind mount below is the
+      # only host-side copy an operator needs to back up.
+      path.repo: /es-bk
+    mem_limit: ${ELASTICSEARCH_MEM_LIMIT:-1g}
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    volumes:
+      - es-data:/usr/share/elasticsearch/data
+      - ./es_bk:/es-bk
+    ports:
+      # Loopback-only administration and backup port. Applications use the
+      # shared network name `elasticsearch`, never this host port.
+      - "127.0.0.1:${ELASTICSEARCH_HOST_PORT:-9202}:9200"
+    healthcheck:
+      # Queries the HTTP listener, so a healthy container is also accepting
+      # requests from the deploy stacks.
+      test: ["CMD-SHELL", "curl -fsS 'http://localhost:9200/_cluster/health?wait_for_status=yellow&timeout=5s' >/dev/null"]
+      interval: 10s
+      timeout: 10s
+      retries: 18
+    networks:
+      emobase-infra:
+        aliases:
+          - elasticsearch
+
 volumes:
   mysql-data:
+  es-data:
 
 networks:
   emobase-infra:

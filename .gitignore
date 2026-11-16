@@ -1,2 +1,6 @@
 # Local secrets
 .env
+
+# Elasticsearch snapshot bind mount. Keep the directory; ignore its contents.
+es_bk/*
+!es_bk/.gitkeep
