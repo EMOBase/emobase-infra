@@ -20,7 +20,7 @@ clients, users and databases they need. Elasticsearch is shared: each stack
 writes only indices under its own prefix.
 
 ```
-Browser ──► portal :9080        Browser ──► Keycloak :8081
+Browser ──► portal :9080        Browser ──► Keycloak :8181
               │                               (KEYCLOAK_PUBLIC_URL)
               │
 portal/species services ──► keycloak:8080 (shared network or public URL)
@@ -134,7 +134,7 @@ Realm names, client credentials and seed users are not part of infra `.env`.
 docker compose up -d --wait
 ```
 
-This starts Keycloak at `http://localhost:8081/keycloak`. For the full local
+This starts Keycloak at `http://localhost:8181/keycloak`. For the full local
 walkthrough including the portal and species stacks, see the
 [EMOBase deployment guide](https://github.com/EMOBase/emobase-docs/blob/main/DEPLOYMENT.md#local-setup-no-public-server).
 

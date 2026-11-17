@@ -80,7 +80,7 @@ services:
     ports:
       # Browser-facing Keycloak. Put a TLS reverse proxy in front in production
       # and keep KEYCLOAK_PUBLIC_URL on the public URL.
-      - "${KEYCLOAK_HOST_PORT:-8081}:8080"
+      - "${KEYCLOAK_HOST_PORT:-8181}:8080"
     networks:
       emobase-infra:
         aliases:

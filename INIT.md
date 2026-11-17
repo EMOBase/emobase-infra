@@ -17,7 +17,7 @@ Every question shows a default. Press Enter to accept it.
 | Question | Default |
 | --- | --- |
 | Shared Docker network | `emobase-infra` |
-| Keycloak host port | `8081` |
+| Keycloak host port | `8181` |
 | Elasticsearch host port | `9202` |
 | Browser-facing Keycloak URL | detected host IPv4, or localhost with `--local` |
 
@@ -86,7 +86,7 @@ Local trial:
 Server with a direct IP:
 
 ```bash
-./init.sh --keycloak-public-url http://192.168.64.5:8081/keycloak
+./init.sh --keycloak-public-url http://192.168.64.5:8181/keycloak
 ```
 
 Server with TLS:
