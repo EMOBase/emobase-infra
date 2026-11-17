@@ -31,26 +31,63 @@ fatal() {
   exit 1
 }
 
-# ask VAR "label" "default"
+# ask VAR "label" "default" [VALIDATOR] [ERROR]
 # Keeps an explicit flag or discovered value; otherwise asks with a default.
-# --yes uses the default without prompting. A non-terminal without --yes aborts
-# instead of silently generating a configuration nobody confirmed.
+# --yes uses the default without prompting. An invalid explicit or default
+# value is fatal; an invalid interactive answer is rejected and asked again.
+# A non-terminal without --yes aborts instead of silently generating a
+# configuration nobody confirmed.
 ask() {
-  local var="$1" label="$2" default="$3" value
-  [[ -n "${!var:-}" ]] && return 0
+  local var="$1" label="$2" default="$3" validator="${4:-}" error="${5:-Invalid value}" value
+  if [[ -n "${!var:-}" ]]; then
+    if [[ -n "$validator" ]] && ! "$validator" "${!var}"; then
+      fatal "$error"
+    fi
+    return 0
+  fi
   if [[ "$YES" == true ]]; then
     printf -v "$var" '%s' "$default"
+    if [[ -n "$validator" ]] && ! "$validator" "$default"; then
+      fatal "$error"
+    fi
     return 0
   fi
   if [[ ! -t 0 ]]; then
     fatal "Cannot ask for ${label}: stdin is not a terminal. Pass --yes or the matching option."
   fi
-  if [[ -n "$default" ]]; then
-    read -rp "${label} [${default}]: " value
-  else
-    read -rp "${label}: " value
-  fi
-  printf -v "$var" '%s' "${value:-$default}"
+  while true; do
+    if [[ -n "$default" ]]; then
+      read -rp "${label} [${default}]: " value
+    else
+      read -rp "${label}: " value
+    fi
+    value="${value:-$default}"
+    if [[ -z "$validator" ]] || "$validator" "$value"; then
+      printf -v "$var" '%s' "$value"
+      return 0
+    fi
+    >&2 echo "❌ $error"
+  done
+}
+
+valid_network() {
+  [[ "$1" =~ ^[a-zA-Z0-9_.-]+$ ]]
+}
+
+valid_port() {
+  [[ "$1" =~ ^[0-9]+$ ]] && (( 10#$1 >= 1 && 10#$1 <= 65535 ))
+}
+
+valid_elasticsearch_port() {
+  valid_port "$1" && [[ "$1" != "$KEYCLOAK_HOST_PORT" ]]
+}
+
+valid_keycloak_url() {
+  local value="$1"
+  while [[ "$value" == */ ]]; do
+    value="${value%/}"
+  done
+  [[ "$value" =~ ^https?://[^/]+ ]] && [[ "$value" == */keycloak ]]
 }
 
 # detect_host_ip prints the address used for the default route. It is the
@@ -194,18 +231,14 @@ if [[ "$PRINT" != true ]]; then
 fi
 
 # Ask for inputs
-ask INFRA_NETWORK "🔌 Shared Docker network" "$DEFAULT_INFRA_NETWORK"
-[[ "$INFRA_NETWORK" =~ ^[a-zA-Z0-9_.-]+$ ]] || fatal "EMOBASE_INFRA_NETWORK contains invalid characters"
+ask INFRA_NETWORK "🔌 Shared Docker network" "$DEFAULT_INFRA_NETWORK" \
+  valid_network "EMOBASE_INFRA_NETWORK contains invalid characters"
 
-ask KEYCLOAK_HOST_PORT "🔌 Host port for Keycloak" "$DEFAULT_KEYCLOAK_HOST_PORT"
-[[ "$KEYCLOAK_HOST_PORT" =~ ^[0-9]+$ ]] && (( 10#$KEYCLOAK_HOST_PORT >= 1 && 10#$KEYCLOAK_HOST_PORT <= 65535 )) \
-  || fatal "KEYCLOAK_HOST_PORT must be a number between 1 and 65535"
+ask KEYCLOAK_HOST_PORT "🔌 Host port for Keycloak" "$DEFAULT_KEYCLOAK_HOST_PORT" \
+  valid_port "KEYCLOAK_HOST_PORT must be a number between 1 and 65535"
 
-ask ELASTICSEARCH_HOST_PORT "🔌 Loopback host port for Elasticsearch" "$DEFAULT_ELASTICSEARCH_HOST_PORT"
-[[ "$ELASTICSEARCH_HOST_PORT" =~ ^[0-9]+$ ]] && (( 10#$ELASTICSEARCH_HOST_PORT >= 1 && 10#$ELASTICSEARCH_HOST_PORT <= 65535 )) \
-  || fatal "ELASTICSEARCH_HOST_PORT must be a number between 1 and 65535"
-[[ "$ELASTICSEARCH_HOST_PORT" != "$KEYCLOAK_HOST_PORT" ]] \
-  || fatal "ELASTICSEARCH_HOST_PORT must differ from KEYCLOAK_HOST_PORT"
+ask ELASTICSEARCH_HOST_PORT "🔌 Loopback host port for Elasticsearch" "$DEFAULT_ELASTICSEARCH_HOST_PORT" \
+  valid_elasticsearch_port "ELASTICSEARCH_HOST_PORT must be a number between 1 and 65535 and differ from KEYCLOAK_HOST_PORT"
 
 default_public="http://localhost:${KEYCLOAK_HOST_PORT}/keycloak"
 if [[ "$LOCAL" != true ]]; then
@@ -220,22 +253,23 @@ fi
 if [[ "$LOCAL" == true ]]; then
   KEYCLOAK_PUBLIC_URL="${KEYCLOAK_PUBLIC_URL:-$default_public}"
 fi
-ask KEYCLOAK_PUBLIC_URL "🌐 Browser-facing Keycloak URL" "$default_public"
+ask KEYCLOAK_PUBLIC_URL "🌐 Browser-facing Keycloak URL" "$default_public" \
+  valid_keycloak_url "KEYCLOAK_PUBLIC_URL must be a full URL ending with /keycloak (for example https://auth.example.org/keycloak)."
 if [[ "$KEYCLOAK_PUBLIC_URL" == *localhost* ]] && [[ "$LOCAL" != true ]]; then
   >&2 echo "⚠️  KEYCLOAK_PUBLIC_URL points at localhost."
   >&2 echo "   Set --keycloak-public-url for a real server."
 fi
-KEYCLOAK_PUBLIC_URL="${KEYCLOAK_PUBLIC_URL%/}"
-[[ "$KEYCLOAK_PUBLIC_URL" =~ ^https?://[^/]+ ]] \
-  || fatal "KEYCLOAK_PUBLIC_URL must start with http:// or https://"
-[[ "$KEYCLOAK_PUBLIC_URL" == */keycloak ]] \
-  || fatal "KEYCLOAK_PUBLIC_URL must end with /keycloak"
+while [[ "$KEYCLOAK_PUBLIC_URL" == */ ]]; do
+  KEYCLOAK_PUBLIC_URL="${KEYCLOAK_PUBLIC_URL%/}"
+done
 
 # The container-facing URL is fixed: infra's Keycloak is the `keycloak` Compose
 # service on the shared network. Do not ask for it; the flag remains as an
 # override for unusual setups.
 KEYCLOAK_INTERNAL_URL="${KEYCLOAK_INTERNAL_URL:-$DEFAULT_KEYCLOAK_INTERNAL_URL}"
-KEYCLOAK_INTERNAL_URL="${KEYCLOAK_INTERNAL_URL%/}"
+while [[ "$KEYCLOAK_INTERNAL_URL" == */ ]]; do
+  KEYCLOAK_INTERNAL_URL="${KEYCLOAK_INTERNAL_URL%/}"
+done
 [[ "$KEYCLOAK_INTERNAL_URL" =~ ^https?://[^/]+ ]] \
   || fatal "KEYCLOAK_INTERNAL_URL must start with http:// or https://"
 [[ "$KEYCLOAK_INTERNAL_URL" == */keycloak ]] \
