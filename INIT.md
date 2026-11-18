@@ -1,6 +1,6 @@
 # `init.sh` reference
 
-`init.sh` generates `emobase-infra/.env`. It configures the
+`init.sh` generates the checkout's `.env`. It configures the
 MySQL/Keycloak/Elasticsearch runtime only. It does not create a Keycloak realm,
 an application database or any Elasticsearch index.
 

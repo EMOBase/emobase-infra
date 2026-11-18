@@ -95,7 +95,7 @@ a species database after retiring a site:
 
 The portal writes `genomics-*` indices
 (`EMOBASE_GENOMICS_ELASTICSEARCH__INDEX_PREFIX`). Each species stack writes
-`<prefix>-*` indices; `emobase-deploy/init.sh` sets its
+`<prefix>-*` indices; the species checkout's `init.sh` sets its
 `EMOBASE_ES_INDEX_PREFIX`, and the deploy Compose file maps it to each
 service's index-prefix property.
 
