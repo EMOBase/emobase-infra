@@ -50,13 +50,10 @@ docker compose up -d --wait
 ```
 
 Then deploy the portal and species stacks. Infra creates no realm or
-application database.
-
-- [Deployment guide](https://github.com/EMOBase/emobase-docs/blob/main/DEPLOYMENT.md)
-- [Operations](https://github.com/EMOBase/emobase-docs/blob/main/OPERATIONS.md)
-- [`init.sh` reference](INIT.md)
-- [Realm ownership](https://github.com/EMOBase/emobase-docs/blob/main/REALMS.md)
-- [Backups](BACKUP.md)
+application database. See the [`init.sh` reference](INIT.md) for the prompts and
+flags, and the
+[deployment guide](https://github.com/EMOBase/emobase-docs/blob/main/DEPLOYMENT.md)
+for the full order.
 
 The Keycloak admin console is at `${KEYCLOAK_PUBLIC_URL}/admin/`, using
 `KEYCLOAK_ADMIN` and `KEYCLOAK_ADMIN_PASSWORD` from this `.env`.
