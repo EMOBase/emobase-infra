@@ -52,9 +52,11 @@ docker compose up -d --wait
 Then deploy the portal and species stacks. Infra creates no realm or
 application database.
 
-- [Full deployment order](https://github.com/EMOBase/emobase-docs/blob/main/DEPLOYMENT.md)
+- [Deployment guide](https://github.com/EMOBase/emobase-docs/blob/main/DEPLOYMENT.md)
+- [Operations](https://github.com/EMOBase/emobase-docs/blob/main/OPERATIONS.md)
 - [`init.sh` reference](INIT.md)
 - [Realm ownership](https://github.com/EMOBase/emobase-docs/blob/main/REALMS.md)
+- [Backups](BACKUP.md)
 
 The Keycloak admin console is at `${KEYCLOAK_PUBLIC_URL}/admin/`, using
 `KEYCLOAK_ADMIN` and `KEYCLOAK_ADMIN_PASSWORD` from this `.env`.
@@ -127,7 +129,7 @@ The deploy stacks' `init.sh` reads these from this `.env`:
 
 Realm names, client credentials and seed users are not part of infra `.env`.
 
-## Local trial
+## Local development
 
 ```bash
 ./init.sh --local
@@ -136,35 +138,12 @@ docker compose up -d --wait
 
 This starts Keycloak at `http://localhost:8181/keycloak`. For the full local
 walkthrough including the portal and species stacks, see the
-[EMOBase deployment guide](https://github.com/EMOBase/emobase-docs/blob/main/DEPLOYMENT.md#local-setup-no-public-server).
+[Local development guide](https://github.com/EMOBase/emobase-docs/blob/main/DEVELOPMENT.md).
 
 ## Backups
 
-The MySQL data volume contains the portal genomics data, Keycloak realms/users
-and every species' Directus data. Back up the whole instance:
-
-```bash
-docker compose exec -T mysql \
-  sh -c 'exec mysqldump -uroot -p"$MYSQL_ROOT_PASSWORD" --all-databases' \
-  > emobase-mysql-$(date +%F).sql
-```
-
-The Elasticsearch snapshot repository is `./es_bk`. The container runs as UID
-1000, so make the bind mount writable first (`sudo chown -R 1000:1000 es_bk`).
-Register the repository once, then take a snapshot of all indices:
-
-```bash
-curl -X PUT "http://127.0.0.1:${ELASTICSEARCH_HOST_PORT:-9202}/_snapshot/emobase" \
-  -H "Content-Type: application/json" \
-  -d '{"type":"fs","settings":{"location":"/es-bk","compress":true}}'
-
-curl -X PUT "http://127.0.0.1:${ELASTICSEARCH_HOST_PORT:-9202}/_snapshot/emobase/full_$(date +%F)?wait_for_completion=true" \
-  -H "Content-Type: application/json" \
-  -d '{"indices":"*","include_global_state":true}'
-```
-
-Keep this repository's `.env` (secrets), the `mysql-data` and `es-data` volumes,
-and the contents of `es_bk`.
+See [BACKUP.md](BACKUP.md) for the MySQL dump, the Elasticsearch snapshot
+procedure and the volumes to keep.
 
 ## Updating
 
@@ -191,16 +170,11 @@ Only do this when the data can be lost.
 
 ## Notes
 
-- The MySQL and Elasticsearch ports are not published on the LAN. MySQL has no
-  host port; Elasticsearch binds `127.0.0.1:${ELASTICSEARCH_HOST_PORT}` for
-  administration. Attach administration or backup containers to the
-  `emobase-infra` network, or use `docker compose exec`.
-- Run one `emobase-infra` per server. MySQL, Keycloak and Elasticsearch are not
-  shared between servers; a species on another server uses that server's own
-  infra.
+- MySQL has no host port, and Elasticsearch binds only
+  `127.0.0.1:${ELASTICSEARCH_HOST_PORT}` for administration. Attach
+  administration or backup containers to the `emobase-infra` network, or use
+  `docker compose exec`.
 - Keycloak is published on `KEYCLOAK_HOST_PORT` and has its own public URL
   (`KEYCLOAK_PUBLIC_URL`). Put a TLS reverse proxy in front in production.
-- Keycloak starts with only the `master` realm. The portal/species stacks create
-  and own application realms.
 - All stacks share one Elasticsearch. Index prefixes keep their data separate;
   they are not an authorization boundary.

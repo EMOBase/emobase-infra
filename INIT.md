@@ -79,7 +79,7 @@ server has enough RAM; keep the limit above the heap size.
 
 ## Examples
 
-Local trial:
+Local setup:
 
 ```bash
 ./init.sh --local
